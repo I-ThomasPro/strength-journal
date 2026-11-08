@@ -1,0 +1,29 @@
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
+
+from app.api.router import api_router
+from app.config import get_settings
+
+
+def generate_operation_id(route: APIRoute) -> str:
+    """Name operations `{tag}-{function name}` so generated API clients read cleanly"""
+    tag = route.tags[0] if route.tags else "default"
+    return f"{tag}-{route.name}"
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(
+        title=settings.app_name,
+        version="0.1.0",
+        # Keep everything under /api so the frontend can own all other paths
+        docs_url="/api/docs",
+        openapi_url="/api/openapi.json",
+        redoc_url=None,
+        generate_unique_id_function=generate_operation_id,
+    )
+    app.include_router(api_router)
+    return app
+
+
+app = create_app()
