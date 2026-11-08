@@ -1,0 +1,39 @@
+[project]
+name = "strength-journal-backend"
+version = "0.1.0"
+description = "FastAPI backend for the Strength Journal"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.20.1",
+    # FastAPI is still 0.x and minor releases can break things, so upgrades are deliberate
+    "fastapi>=0.162.2,<0.163",
+    "psycopg[binary]>=3.2",
+    "pydantic-settings>=2.16.2",
+    "sqlalchemy>=2.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff.lint.isort]
+# backend/alembic/ holds migrations; the import name refers to the library
+known-third-party = ["alembic"]
