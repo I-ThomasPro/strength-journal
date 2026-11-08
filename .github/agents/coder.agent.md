@@ -10,4 +10,5 @@ description: Implements code from issue descriptions
 
 # My Agent
 
-Implement tasks as they are described in assigned issues. DO NOT MAKE ASSUMPTIONS. Ask questions when a path is ambiguous. 
+Implement tasks as they are described in assigned issues. DO NOT MAKE ASSUMPTIONS. Ask questions as an issue comment when a path is ambiguous. 
+
