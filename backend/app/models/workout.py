@@ -12,6 +12,7 @@ from app.models.exercise import Exercise
 
 if TYPE_CHECKING:
     from app.models.routine import Routine
+    from app.models.set import Set
 
 
 class Workout(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -49,7 +50,7 @@ class Workout(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class WorkoutExercise(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """An Exercise at a position within a Workout. Sets will belong to this row"""
+    """An Exercise at a position within a Workout, with its sequence of Sets"""
 
     __tablename__ = "workout_exercises"
 
@@ -66,6 +67,13 @@ class WorkoutExercise(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Many-to-one only: an Exercise.workout_exercises collection would make the ORM try to
     # null exercise_id on delete instead of letting the RESTRICT stop it
     exercise: Mapped[Exercise] = relationship()
+    # passive_deletes leaves deleting the sets to the database's ON DELETE CASCADE
+    sets: Mapped[list[Set]] = relationship(
+        back_populates="workout_exercise",
+        order_by="Set.position",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         # Deferred for the same reason as workouts; also serves lookups by workout_id

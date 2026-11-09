@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,11 +11,7 @@ from tests.factories import (
     create_workout,
     create_workout_exercise,
 )
-
-
-def check_deferred_constraints(session: Session) -> None:
-    """Position uniqueness is checked at commit; force the check now (tests never commit)"""
-    session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+from tests.helpers import check_deferred_constraints
 
 
 def test_routine_workouts_are_ordered_by_position(db_session: Session) -> None:
