@@ -21,6 +21,24 @@ class ReadModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+def _drop_default(schema: dict[str, Any]) -> None:
+    schema.pop("default", None)
+
+
+def omitted() -> Any:
+    """Default for an `XUpdate` field that may be left out but not sent as null, e.g.
+    `name: Name = omitted()`. Fields that can be cleared are typed `X | None = None` instead"""
+    return Field(default=None, json_schema_extra=_drop_default)
+
+
+class UpdateModel(BaseModel):
+    """Base for `XUpdate` (PATCH) bodies: only the fields sent are changed"""
+
+    def apply_to(self, item: object) -> None:
+        for field, value in self.model_dump(exclude_unset=True).items():
+            setattr(item, field, value)
+
+
 class Page[T](BaseModel):
     """One page of an `index`; `total` counts every match, not just this page"""
 
