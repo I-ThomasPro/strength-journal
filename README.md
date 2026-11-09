@@ -39,7 +39,7 @@ uv run alembic revision --autogenerate -m "describe the change"
 uv run alembic upgrade head
 ```
 
-Import new model modules in `backend/alembic/env.py` so autogenerate can see them. CI fails if the models and migrations disagree (`alembic check`).
+Import new model modules in `backend/app/models/__init__.py`, which registers every model for the app and for Alembic autogenerate. CI fails if the models and migrations disagree (`alembic check`).
 
 ### Model conventions
 Models live in `backend/app/models/`, one module per table, and build on `app/models/common.py`:
@@ -47,6 +47,7 @@ Models live in `backend/app/models/`, one module per table, and build on `app/mo
 - `TimestampMixin`: `created_at` / `updated_at`, both defaulting to now; `updated_at` is bumped on update
 - `WeightUnit` (`kg` / `lb`): store it in a `WeightUnitType()` column and add `weight_unit_check("<column>")` to the table's `__table_args__`
 - Other fixed sets of values (e.g. `ExerciseType`): define a `StrEnum`, store it in a `TextEnum(MyEnum)` column and add `enum_check("<column>", MyEnum)` to `__table_args__`
+- Ordered children (a Routine's workouts, a Workout's exercises): an integer `position` with `CHECK (position >= 0)` and `UNIQUE (parent_id, position) DEFERRABLE INITIALLY DEFERRED`, so items can be reordered within one transaction. Tests force the check with `SET CONSTRAINTS ALL IMMEDIATE`
 
 Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, email=...)`).
 
