@@ -1,12 +1,14 @@
 from logging.config import fileConfig
+from typing import Literal
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from sqlalchemy import TypeDecorator, create_engine, pool
 
 from app.config import get_settings
 from app.db import Base
 
 # Import model modules here as they're added so autogenerate can see their tables
+from app.models import user  # noqa: F401
 
 config = context.config
 
@@ -19,6 +21,13 @@ target_metadata = Base.metadata
 def get_url() -> str:
     """Use an explicitly set sqlalchemy.url (tests do this), else the app's DATABASE_URL"""
     return config.get_main_option("sqlalchemy.url") or get_settings().database_url
+
+
+def render_item(type_: str, obj: object, autogen_context: object) -> str | Literal[False]:
+    """Autogenerate app column types (TypeDecorators) as their SQL type, not as app imports"""
+    if type_ == "type" and isinstance(obj, TypeDecorator):
+        return f"sa.{obj.impl_instance!r}"
+    return False
 
 
 def run_migrations_offline() -> None:
@@ -44,6 +53,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            render_item=render_item,
         )
 
         with context.begin_transaction():
