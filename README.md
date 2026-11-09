@@ -48,6 +48,7 @@ Models live in `backend/app/models/`, one module per table, and build on `app/mo
 - `WeightUnit` (`kg` / `lb`): store it in a `WeightUnitType()` column and add `weight_unit_check("<column>")` to the table's `__table_args__`
 - Other fixed sets of values (e.g. `ExerciseType`): define a `StrEnum`, store it in a `TextEnum(MyEnum)` column and add `enum_check("<column>", MyEnum)` to `__table_args__`
 - Ordered children (a Routine's workouts, a Workout's exercises, a workout exercise's sets): an integer `position` with `CHECK (position >= 0)` and `UNIQUE (parent_id, position) DEFERRABLE INITIALLY DEFERRED`, so items can be reordered within one transaction. Tests force the check with `check_deferred_constraints()` from `backend/tests/helpers.py`
+- References to an exercise from another table (workout exercises, progressions, and later set records) use `ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED`. An exercise in use can't be deleted, and the check waits until commit so deleting a user can cascade through both their custom exercises and their routines
 
 Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, email=...)`).
 

@@ -57,15 +57,20 @@ class WorkoutExercise(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     workout_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("workouts.id", ondelete="CASCADE"), nullable=False
     )
-    # RESTRICT: an exercise that's used in a workout can't be deleted
+    # An exercise that's used in a workout can't be deleted. The check is deferred to commit:
+    # deleting a user removes both their custom exercises and their routines, and an
+    # immediate check (RESTRICT, or plain NO ACTION, which Postgres checks after each
+    # cascaded delete) would reject the exercise before the routine's rows are gone
     exercise_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("exercises.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("exercises.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"),
+        nullable=False,
+        index=True,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     workout: Mapped[Workout] = relationship(back_populates="exercises")
     # Many-to-one only: an Exercise.workout_exercises collection would make the ORM try to
-    # null exercise_id on delete instead of letting the RESTRICT stop it
+    # null exercise_id on delete instead of letting the foreign key stop it
     exercise: Mapped[Exercise] = relationship()
     # passive_deletes leaves deleting the sets to the database's ON DELETE CASCADE
     sets: Mapped[list[Set]] = relationship(

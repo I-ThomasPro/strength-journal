@@ -39,9 +39,12 @@ class Progression(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     routine_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("routines.id", ondelete="CASCADE"), nullable=False
     )
-    # RESTRICT: an exercise with a progression can't be deleted
+    # An exercise with a progression can't be deleted. Deferred to commit for the same reason
+    # as workout_exercises.exercise_id: deleting a user cascades to their routines too
     exercise_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("exercises.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("exercises.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"),
+        nullable=False,
+        index=True,
     )
     # Weight added each time the condition is met
     increment: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)

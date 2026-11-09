@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.common import WeightUnit
 from app.models.progression import Progression, ProgressionCondition
 from tests.factories import create_exercise, create_progression, create_routine
+from tests.helpers import check_deferred_constraints
 
 
 def test_progression_links_a_routine_and_exercise_with_defaults(db_session: Session) -> None:
@@ -71,9 +72,12 @@ def test_deleting_a_routine_deletes_its_progressions(db_session: Session) -> Non
     assert db_session.get(type(exercise), exercise.id) is not None
 
 
-def test_deleting_an_exercise_with_a_progression_is_rejected(db_session: Session) -> None:
+def test_deleting_an_exercise_with_a_progression_is_rejected_at_commit(
+    db_session: Session,
+) -> None:
     progression = create_progression(db_session)
 
     db_session.delete(progression.exercise)
+    db_session.flush()
     with pytest.raises(IntegrityError, match="fk_progressions_exercise_id_exercises"):
-        db_session.flush()
+        check_deferred_constraints(db_session)

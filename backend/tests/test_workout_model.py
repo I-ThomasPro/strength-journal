@@ -130,9 +130,10 @@ def test_removing_an_exercise_from_a_workout_deletes_that_entry(db_session: Sess
     assert db_session.get(WorkoutExercise, entry_id) is None
 
 
-def test_deleting_an_exercise_in_use_is_rejected(db_session: Session) -> None:
+def test_deleting_an_exercise_in_use_is_rejected_at_commit(db_session: Session) -> None:
     entry = create_workout_exercise(db_session)
 
     db_session.delete(entry.exercise)
+    db_session.flush()
     with pytest.raises(IntegrityError, match="fk_workout_exercises_exercise_id_exercises"):
-        db_session.flush()
+        check_deferred_constraints(db_session)
