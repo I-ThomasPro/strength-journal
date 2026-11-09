@@ -10,8 +10,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 
+from app.auth.security import hash_password
+from app.auth.sessions import CSRF_HEADER, start_session
+from app.config import get_settings
 from app.db import get_db, get_plain_session, request_transaction
 from app.main import app
+from app.models.user import User
+from tests.factories import create_user
+from tests.helpers import TEST_PASSWORD
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
@@ -72,7 +78,8 @@ def client_for(db_session: Session) -> Iterator[Callable[[FastAPI], TestClient]]
         target.dependency_overrides[get_db] = request_db
         target.dependency_overrides[get_plain_session] = lambda: db_session
         apps.append(target)
-        return TestClient(target)
+        # HTTPS, so the Secure session cookie is sent back as it would be in production
+        return TestClient(target, base_url="https://testserver")
 
     try:
         yield make
@@ -86,3 +93,18 @@ def client(client_for: Callable[[FastAPI], TestClient]) -> Iterator[TestClient]:
     """API client for the real app, whose requests use the test session"""
     with client_for(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def current_user(db_session: Session) -> User:
+    """The user `logged_in_client` is logged in as; their password is TEST_PASSWORD"""
+    return create_user(db_session, password_hash=hash_password(TEST_PASSWORD))
+
+
+@pytest.fixture
+def logged_in_client(client: TestClient, db_session: Session, current_user: User) -> TestClient:
+    """API client logged in as `current_user`, sending the CSRF header on every request"""
+    session, token = start_session(db_session, current_user)
+    client.cookies.set(get_settings().session_cookie_name, token)
+    client.headers[CSRF_HEADER] = session.csrf_token
+    return client

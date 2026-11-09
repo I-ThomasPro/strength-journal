@@ -6,6 +6,9 @@ from httpx import Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+# The password of the `current_user` fixture
+TEST_PASSWORD = "correct horse battery staple"
+
 
 def check_deferred_constraints(session: Session) -> None:
     """Position uniqueness is checked at commit; force the check now (tests never commit)"""
