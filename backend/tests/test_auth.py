@@ -279,8 +279,10 @@ def test_the_password_hash_never_appears_in_responses(
     responses = [
         client.post("/api/session", json={"email": current_user.email, "password": TEST_PASSWORD}),
         client.get("/api/session"),
-        client.post("/api/registration", json=registration(code)),
     ]
+    # Sign up as someone else, logged out (logged in, it would need the CSRF token)
+    client.cookies.clear()
+    responses.append(client.post("/api/registration", json=registration(code)))
 
     for response in responses:
         assert response.status_code < 300, response.text
@@ -302,3 +304,68 @@ def test_create_invite_command_prints_a_working_code(
     invite = invite_for(db_session, code)
     assert timedelta(days=2, hours=23) < invite.expires_at - now() <= timedelta(days=3)
     assert client.post("/api/registration", json=registration(code)).status_code == 201
+
+
+# Review fixes: no email enumeration, CSRF on login and sign-up, no echoed secrets
+
+
+def test_an_invalid_invite_doesnt_reveal_whether_an_email_is_taken(
+    client: TestClient, db_session: Session
+) -> None:
+    create_user(db_session, email="taken@example.com")
+
+    taken = client.post(
+        "/api/registration", json=registration("no-such-code", email="taken@example.com")
+    )
+    free = client.post(
+        "/api/registration", json=registration("no-such-code", email="free@example.com")
+    )
+
+    assert_error(taken, 422, "invalid_invite")
+    assert (taken.status_code, taken.json()) == (free.status_code, free.json())
+
+
+@pytest.mark.parametrize("path", ["/api/session", "/api/registration"])
+def test_logging_in_or_signing_up_while_logged_in_needs_the_csrf_token(
+    logged_in_client: TestClient, db_session: Session, current_user: User, path: str
+) -> None:
+    body = (
+        {"email": current_user.email, "password": TEST_PASSWORD}
+        if path == "/api/session"
+        else registration(create_invite(db_session))
+    )
+    token = logged_in_client.headers.pop(CSRF_HEADER)
+
+    assert_error(logged_in_client.post(path, json=body), 403, "csrf_failed")
+    assert logged_in_client.post(path, json=body, headers={CSRF_HEADER: token}).status_code == 201
+
+
+def test_logging_in_without_a_session_needs_no_csrf_token(
+    client: TestClient, current_user: User
+) -> None:
+    client.cookies.set(COOKIE, "an-expired-or-unknown-token")
+
+    response = client.post(
+        "/api/session", json={"email": current_user.email, "password": TEST_PASSWORD}
+    )
+
+    assert response.status_code == 201
+
+
+def test_validation_errors_dont_echo_passwords_or_invite_codes(
+    client: TestClient, db_session: Session
+) -> None:
+    code = create_invite(db_session)
+    short_password = client.post("/api/registration", json=registration(code, password="secret-9"))
+    missing_password = client.post(
+        "/api/registration",
+        json={k: v for k, v in registration(code).items() if k != "password"},
+    )
+    missing_email = client.post("/api/session", json={"password": "my real password"})
+
+    assert_error(short_password, 422, "invalid")
+    assert "secret-9" not in short_password.text
+    assert_error(missing_password, 422, "invalid")
+    assert code not in missing_password.text
+    assert_error(missing_email, 422, "invalid")
+    assert "my real password" not in missing_email.text

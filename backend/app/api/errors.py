@@ -95,6 +95,14 @@ def integrity_error_response(exc: IntegrityError) -> JSONResponse:
     )
 
 
+def sanitized_validation_errors(exc: RequestValidationError) -> list:
+    """Validation errors without the submitted values: each error's `input` can hold a
+    password, an invite code or the whole request body, which must never be echoed back"""
+    return jsonable_encoder(
+        [{key: value for key, value in error.items() if key != "input"} for error in exc.errors()]
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def handle_api_error(_request: Request, exc: ApiError) -> JSONResponse:
@@ -112,7 +120,7 @@ def register_error_handlers(app: FastAPI) -> None:
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "invalid",
             "The request is invalid",
-            errors=jsonable_encoder(exc.errors()),
+            errors=sanitized_validation_errors(exc),
         )
 
     @app.exception_handler(StarletteHTTPException)

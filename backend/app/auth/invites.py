@@ -23,10 +23,12 @@ def create_invite(db: Session, days: int = DEFAULT_INVITE_DAYS) -> str:
     return code
 
 
-def redeem_invite(db: Session, code: str, user: User) -> Invite:
-    """Mark an unused, unexpired invite as used by `user`; 422 `invalid_invite` otherwise.
+def claim_invite(db: Session, code: str) -> Invite:
+    """Lock an unused, unexpired invite for this sign-up; 422 `invalid_invite` otherwise.
 
-    The row is locked so two sign-ups can't use the same invite.
+    Call this before anything else in a sign-up, so a bad invite fails the same way whatever
+    else was sent (e.g. a taken email can't be discovered without a valid invite). The row
+    lock stops two sign-ups using the same invite.
     """
     invite = db.scalar(select(Invite).where(Invite.code_hash == hash_token(code)).with_for_update())
     if invite is None or invite.used_at is not None or invite.expires_at <= now():
@@ -35,6 +37,9 @@ def redeem_invite(db: Session, code: str, user: User) -> Invite:
             "invalid_invite",
             "This invite code isn't valid; it may be used or expired",
         )
+    return invite
+
+
+def mark_used(invite: Invite, user: User) -> None:
     invite.used_at = now()
     invite.used_by = user
-    return invite

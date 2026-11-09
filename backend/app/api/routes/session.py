@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 
 from app.api.errors import ApiError
@@ -6,6 +6,7 @@ from app.auth.security import verify_dummy_password, verify_password
 from app.auth.sessions import (
     CurrentSession,
     clear_session_cookie,
+    require_csrf_if_logged_in,
     set_session_cookie,
     start_session,
 )
@@ -21,7 +22,11 @@ def invalid_credentials() -> ApiError:
     return ApiError(status.HTTP_401_UNAUTHORIZED, "invalid_credentials", "Wrong email or password")
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_if_logged_in)],
+)
 def create(body: SessionCreate, db: DbSession, response: Response) -> SessionRead:
     """Log in. A wrong email and a wrong password get the same response"""
     user = db.scalar(select(User).where(User.email == body.email))

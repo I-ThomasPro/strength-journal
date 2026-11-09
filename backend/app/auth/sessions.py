@@ -102,15 +102,27 @@ def get_current_session(request: Request, response: Response, db: DbSession) -> 
     session = find_session(db, token)
     if session is None or token is None:
         raise not_authenticated()
+    _check_csrf(request, session)
+    if refresh_if_due(session):
+        set_session_cookie(response, token)
+    return session
+
+
+def _check_csrf(request: Request, session: UserSession) -> None:
     if request.method not in SAFE_METHODS and not tokens_match(
         request.headers.get(CSRF_HEADER), session.csrf_token
     ):
         raise ApiError(
             status.HTTP_403_FORBIDDEN, "csrf_failed", f"Missing or wrong {CSRF_HEADER} header"
         )
-    if refresh_if_due(session):
-        set_session_cookie(response, token)
-    return session
+
+
+def require_csrf_if_logged_in(request: Request, db: DbSession) -> None:
+    """For routes that work logged out (login, sign-up): if the request carries a valid
+    session cookie, it's a logged-in unsafe request and needs that session's CSRF token"""
+    session = find_session(db, request.cookies.get(get_settings().session_cookie_name))
+    if session is not None:
+        _check_csrf(request, session)
 
 
 CurrentSession = Annotated[UserSession, Depends(get_current_session)]
