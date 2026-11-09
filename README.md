@@ -53,7 +53,7 @@ Models live in `backend/app/models/`, one module per table, and build on `app/mo
 Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, email=...)`).
 
 ### API conventions
-**RESTful routes.** Every resource uses only the seven Rails actions, with shallow nesting: collection actions under the parent when there is one, member actions flat.
+**RESTful routes.** Resources use the Rails actions by default, with shallow nesting: collection actions under the parent when there is one, member actions flat. A resource only defines the actions it needs.
 
 | Action | Method and path | Returns |
 |---|---|---|
@@ -65,15 +65,17 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
 | update | `PATCH /api/{resources}/{id}` | `XRead` |
 | destroy | `DELETE /api/{resources}/{id}` | 204 |
 
-- **Singular resources** (e.g. `profile`, `session`, `health`) drop `index` and `{id}`: `GET /api/profile`, `GET /api/profile/edit`, `PATCH /api/profile`
+- **Singular resources** (e.g. `profile`, `session`, `health`) drop `index` and `{id}`: `GET /api/profile`, `PATCH /api/profile`, `DELETE /api/session`
 - **Function names:** endpoint functions are named after their action, so operation IDs read `{tag}-{action}` (e.g. `exercises-create`)
-- **No other routes:**
-  - Reordering is `update` with a `position`
-  - Copying is `create` with a source id
-  - A create that's safe to retry takes a client-supplied `id`
-- **Enforced:** `tests/test_restful_routes.py` checks every `/api` route against `app/api/restful.py`, with paths in lowercase plural nouns, hyphen-separated, nested at most one level
+- **Custom routes** are allowed when a standard action would hide what the route does. Examples: copying (`POST /api/routines/{id}/copy`), bulk reordering (`PUT .../order`), or an idempotent create-or-replace with a client-generated id (`PUT /api/set-records/{id}`)
+  - Register each one in `CUSTOM_ROUTES` in `app/api/restful.py` with the reason, in the same change that adds it
+  - Name its function after what it does (e.g. `copy`, which gives `routines-copy`), never after a standard action
+- **Enforced:** `tests/test_restful_routes.py` checks every `/api` route against `app/api/restful.py`
+  - Standard routes must fit their action's shape: lowercase plural nouns, hyphen-separated, nested at most one level
+  - Any other route must be registered
+  - A registered route that no longer exists also fails
 
-**Form data.** `new` and `edit` return the resource's `XUpdate` fields as `defaults` or `values`, plus `options`: the allowed values of fixed-value fields, built with `enum_options(weight_unit=WeightUnit)`. Other resources (e.g. which exercise) come from their own `index`.
+**Form data.** Only add `new` or `edit` where the server supplies defaults the client can't know, e.g. a new set's targets copied from the previous set. Fixed choices such as weight units are already in the OpenAPI schema. Where they exist, they return the resource's `XUpdate` fields as `defaults` or `values`, plus `options` built with `enum_options(weight_unit=WeightUnit)`.
 
 **Requests and errors.**
 - **Transactions:** `DbSession` gives each request one transaction. It ends when the endpoint returns, before the response is sent: deferred constraints are checked, then it commits; any error rolls it back
