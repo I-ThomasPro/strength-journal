@@ -5,10 +5,16 @@ Resources use the Rails actions by default, with shallow nesting:
     index    GET     /api/[{parents}/{parent_id}/]{resources}
     new      GET     /api/[{parents}/{parent_id}/]{resources}/new
     create   POST    /api/[{parents}/{parent_id}/]{resources}
-    show     GET     /api/{resources}/{id}            (or /api/{resource} if singular)
-    edit     GET     /api/{resources}/{id}/edit       (or /api/{resource}/edit)
-    update   PATCH   /api/{resources}/{id}            (or /api/{resource})
-    destroy  DELETE  /api/{resources}/{id}            (or /api/{resource})
+    show     GET     /api/{resources}/{id}
+    edit     GET     /api/{resources}/{id}/edit
+    update   PATCH   /api/{resources}/{id}
+    destroy  DELETE  /api/{resources}/{id}
+
+A parent's id parameter is named after it: /api/routines/{routine_id}/workouts.
+
+Singular resources (one per user or app, listed in SINGULAR_RESOURCES) have no index and
+no {id}: new (/api/{resource}/new), create, show, update, destroy (/api/{resource}) and
+edit (/api/{resource}/edit). They can't be nested or be a parent.
 
 Endpoint functions are named after their action, so operation IDs read `{tag}-{action}`.
 A resource only needs the actions it uses; `new` and `edit` exist only where the server
@@ -27,19 +33,24 @@ from fastapi.routing import APIRoute
 
 API_PREFIX = "/api"
 NAME = re.compile(r"^[a-z]+(-[a-z]+)*$")
-PARENT_ID = re.compile(r"^\{[a-z]+(_[a-z]+)*_id\}$")
 MEMBER_ID = "{id}"
 
-# action -> (HTTP method, allowed path shapes)
+# Resources with one instance per user (or for the app), so no index and no {id}.
+# Add a resource here when it's created as singular.
+SINGULAR_RESOURCES = frozenset({"health", "registration", "session", "profile", "password"})
+
 # Shapes use: R = resource name, P = parent resource name, PID = {parent_id}, ID = {id}
-ACTIONS: dict[str, tuple[str, tuple[tuple[str, ...], ...]]] = {
-    "index": ("GET", (("R",), ("P", "PID", "R"))),
-    "new": ("GET", (("R", "new"), ("P", "PID", "R", "new"))),
-    "create": ("POST", (("R",), ("P", "PID", "R"))),
-    "show": ("GET", (("R", "ID"), ("R",))),
-    "edit": ("GET", (("R", "ID", "edit"), ("R", "edit"))),
-    "update": ("PATCH", (("R", "ID"), ("R",))),
-    "destroy": ("DELETE", (("R", "ID"), ("R",))),
+type Shapes = tuple[tuple[str, ...], ...]
+
+# action -> (HTTP method, path shapes for plural resources, path shapes for singular ones)
+ACTIONS: dict[str, tuple[str, Shapes, Shapes]] = {
+    "index": ("GET", (("R",), ("P", "PID", "R")), ()),
+    "new": ("GET", (("R", "new"), ("P", "PID", "R", "new")), (("R", "new"),)),
+    "create": ("POST", (("R",), ("P", "PID", "R")), (("R",),)),
+    "show": ("GET", (("R", "ID"),), (("R",),)),
+    "edit": ("GET", (("R", "ID", "edit"),), (("R", "edit"),)),
+    "update": ("PATCH", (("R", "ID"),), (("R",),)),
+    "destroy": ("DELETE", (("R", "ID"),), (("R",),)),
 }
 
 # Routes outside the standard actions: (method, path) -> why a standard action doesn't fit.
@@ -47,14 +58,26 @@ ACTIONS: dict[str, tuple[str, tuple[tuple[str, ...], ...]]] = {
 CUSTOM_ROUTES: dict[tuple[str, str], str] = {}
 
 
-def _matches(segments: list[str], shape: tuple[str, ...]) -> bool:
+def parent_id_param(parent: str) -> str:
+    """The id parameter in a nested path, e.g. `workout-exercises` → `{workout_exercise_id}`"""
+    return "{" + parent.replace("-", "_").removesuffix("s") + "_id}"
+
+
+def _is_name(segment: str) -> bool:
+    return bool(NAME.match(segment)) and segment not in ("new", "edit")
+
+
+def _matches(segments: list[str], shape: tuple[str, ...], singular: bool) -> bool:
+    """Does the path fit the shape, with R singular or plural as required?"""
     if len(segments) != len(shape):
         return False
-    for segment, part in zip(segments, shape, strict=True):
-        if part in ("R", "P"):
-            ok = bool(NAME.match(segment)) and segment not in ("new", "edit")
+    for index, (segment, part) in enumerate(zip(segments, shape, strict=True)):
+        if part == "R":
+            ok = _is_name(segment) and (segment in SINGULAR_RESOURCES) == singular
+        elif part == "P":
+            ok = _is_name(segment) and segment not in SINGULAR_RESOURCES
         elif part == "PID":
-            ok = bool(PARENT_ID.match(segment))
+            ok = segment == parent_id_param(segments[index - 1])
         elif part == "ID":
             ok = segment == MEMBER_ID
         else:
@@ -64,6 +87,25 @@ def _matches(segments: list[str], shape: tuple[str, ...]) -> bool:
     return True
 
 
+MEMBER_ACTIONS = ("show", "edit", "update", "destroy")
+
+
+def _shape_hint(segments: list[str], name: str) -> str:
+    """A specific reason a path doesn't fit, where one is easy to spot"""
+    resource = segments[0]
+    nested = len(segments) >= 3 and segments[1].startswith("{") and segments[1] != MEMBER_ID
+    if nested and _is_name(resource) and segments[1] != parent_id_param(resource):
+        return f"; the parent parameter should be {parent_id_param(resource)}"
+    if resource in SINGULAR_RESOURCES:
+        return f"; `{resource}` is singular (no index, no {{id}}, not a parent)"
+    if name in MEMBER_ACTIONS and MEMBER_ID not in segments:
+        return (
+            f"; `{name}` on a plural resource needs /{{id}} "
+            "(add the resource to SINGULAR_RESOURCES if it's singular)"
+        )
+    return ""
+
+
 def _standard_violation(method: str, path: str, name: str) -> str | None:
     label = f"{method} {path} ({name})"
     if name not in ACTIONS:
@@ -71,15 +113,18 @@ def _standard_violation(method: str, path: str, name: str) -> str | None:
             f"{label}: name the function after an action ({', '.join(ACTIONS)}), "
             "or register it in CUSTOM_ROUTES with a reason"
         )
-    expected_method, shapes = ACTIONS[name]
+    expected_method, plural_shapes, singular_shapes = ACTIONS[name]
     if method != expected_method:
         return f"{label}: `{name}` must use {expected_method}, or register a custom route"
     if not path.startswith(API_PREFIX + "/"):
         return f"{label}: must be under {API_PREFIX}/"
     segments = path.removeprefix(API_PREFIX + "/").split("/")
-    if not any(_matches(segments, shape) for shape in shapes):
+    fits = any(_matches(segments, shape, singular=False) for shape in plural_shapes) or any(
+        _matches(segments, shape, singular=True) for shape in singular_shapes
+    )
+    if not fits:
         return (
-            f"{label}: path doesn't fit the `{name}` shape; "
+            f"{label}: path doesn't fit the `{name}` shape{_shape_hint(segments, name)}; "
             "if it's a custom route, register it in CUSTOM_ROUTES with a reason"
         )
     return None

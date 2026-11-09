@@ -65,13 +65,14 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
 | update | `PATCH /api/{resources}/{id}` | `XRead` |
 | destroy | `DELETE /api/{resources}/{id}` | 204 |
 
-- **Singular resources** (e.g. `profile`, `session`, `health`) drop `index` and `{id}`: `GET /api/profile`, `PATCH /api/profile`, `DELETE /api/session`
+- **Singular resources** (e.g. `profile`, `session`, `health`) drop `index` and `{id}`, e.g. `GET /api/profile`, `PATCH /api/profile`, `DELETE /api/session`. They're listed in `SINGULAR_RESOURCES` in `app/api/restful.py` (add new ones there), and they can't be nested or be a parent
+- **Parent parameters** are named after the parent, in singular: `/api/routines/{routine_id}/workouts`, `/api/workout-exercises/{workout_exercise_id}/sets`
 - **Function names:** endpoint functions are named after their action, so operation IDs read `{tag}-{action}` (e.g. `exercises-create`)
 - **Custom routes** are allowed when a standard action would hide what the route does. Examples: copying (`POST /api/routines/{id}/copy`), bulk reordering (`PUT .../order`), or an idempotent create-or-replace with a client-generated id (`PUT /api/set-records/{id}`)
   - Register each one in `CUSTOM_ROUTES` in `app/api/restful.py` with the reason, in the same change that adds it
   - Name its function after what it does (e.g. `copy`, which gives `routines-copy`), never after a standard action
 - **Enforced:** `tests/test_restful_routes.py` checks every `/api` route against `app/api/restful.py`
-  - Standard routes must fit their action's shape: lowercase plural nouns, hyphen-separated, nested at most one level
+  - Standard routes must fit their action's shape: lowercase nouns, hyphen-separated, nested at most one level, with singular and plural resources using their own shapes and parent parameters named after the parent
   - Any other route must be registered
   - A registered route that no longer exists also fails
 
@@ -79,7 +80,7 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
 
 **Requests and errors.**
 - **Transactions:** `DbSession` gives each request one transaction. It ends when the endpoint returns, before the response is sent: deferred constraints are checked, then it commits; any error rolls it back
-- **Error format:** every error is `{"detail": "...", "code": "..."}` (422s add `errors` with the invalid fields). Raise `not_found()`, `read_only()`, `invalid()` or `ApiError` from `app/api/errors.py`
+- **Error format:** every error is `{"detail": "...", "code": "..."}` (422s add `errors` with the invalid fields). The OpenAPI schema documents 422s with this shape (`ErrorBody`). Raise `not_found()`, `read_only()`, `invalid()` or `ApiError` from `app/api/errors.py`
 - **Database conflicts:** become 409s with codes from `CONSTRAINT_ERRORS` (e.g. `duplicate_name`, `exercise_in_use`), even when they fail at commit. Check constraints become 422 `invalid`
 
 **Helpers.**

@@ -1,5 +1,6 @@
 import pytest
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from app.api.restful import (
     app_route_violations,
@@ -7,7 +8,7 @@ from app.api.restful import (
     route_violations,
     stale_custom_routes,
 )
-from app.main import app
+from app.main import app, create_app
 
 COPY = ("POST", "/api/routines/{id}/copy")
 ORDER = ("PUT", "/api/routines/{routine_id}/workouts/order")
@@ -32,9 +33,12 @@ def test_every_api_route_follows_the_rules() -> None:
         ("GET", "/api/routines/{routine_id}/workouts", "index"),
         ("GET", "/api/workout-exercises/{workout_exercise_id}/sets/new", "new"),
         ("POST", "/api/workout-exercises/{workout_exercise_id}/sets", "create"),
+        ("GET", "/api/exercises/{exercise_id}/set-records", "index"),
         # Singular resources
         ("GET", "/api/profile", "show"),
         ("PATCH", "/api/profile", "update"),
+        ("POST", "/api/registration", "create"),
+        ("POST", "/api/session", "create"),
         ("DELETE", "/api/session", "destroy"),
         ("GET", "/api/health", "show"),
     ],
@@ -55,6 +59,20 @@ def test_standard_actions_are_allowed(method: str, path: str, name: str) -> None
         ("GET", "/api/workout_exercises", "index", "doesn't fit"),
         ("POST", "/api/exercises/{id}", "create", "doesn't fit"),
         ("GET", "/exercises", "index", "under /api/"),
+        # The parent parameter must name its parent
+        ("GET", "/api/routines/{exercise_id}/workouts", "index", "should be {routine_id}"),
+        (
+            "POST",
+            "/api/workout-exercises/{workout_id}/sets",
+            "create",
+            "should be {workout_exercise_id}",
+        ),
+        # Plural resources need {id} for member actions; singular ones have no index or {id}
+        ("GET", "/api/exercises", "show", "needs /{id}"),
+        ("PATCH", "/api/exercises", "update", "needs /{id}"),
+        ("GET", "/api/profile", "index", "`profile` is singular"),
+        ("GET", "/api/health/{id}", "show", "`health` is singular"),
+        ("GET", "/api/session/{session_id}/devices", "index", "`session` is singular"),
     ],
 )
 def test_malformed_standard_routes_are_rejected(
@@ -123,3 +141,28 @@ def test_operation_ids_read_tag_and_action() -> None:
     operations = app.openapi()["paths"]["/api/health"]
 
     assert operations["get"]["operationId"] == "health-show"
+
+
+def test_validation_errors_are_documented_with_the_api_error_shape() -> None:
+    test_app = create_app()
+    router = APIRouter(prefix="/api/things", tags=["things"])
+
+    class ThingIn(BaseModel):
+        name: str
+
+    @router.post("")
+    def create(body: ThingIn) -> None: ...
+
+    test_app.include_router(router)
+    schema = test_app.openapi()
+
+    response = schema["paths"]["/api/things"]["post"]["responses"]["422"]
+    assert response["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorBody"
+    }
+    assert set(schema["components"]["schemas"]["ErrorBody"]["properties"]) == {
+        "detail",
+        "code",
+        "errors",
+    }
+    assert "HTTPValidationError" not in schema["components"]["schemas"]
