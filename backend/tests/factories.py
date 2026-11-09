@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.models.exercise import Exercise
 from app.models.user import User
 
 
@@ -18,3 +19,12 @@ def create_user(session: Session, **overrides: object) -> User:
     session.add(user)
     session.flush()
     return user
+
+
+def create_exercise(session: Session, **overrides: object) -> Exercise:
+    """A shared library exercise unless `owner` or `owner_id` is given"""
+    fields: dict[str, object] = {"name": f"Exercise {uuid.uuid4().hex[:12]}"}
+    exercise = Exercise(**(fields | overrides))
+    session.add(exercise)
+    session.flush()
+    return exercise
