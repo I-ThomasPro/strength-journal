@@ -11,6 +11,7 @@ from app.models.exercise import Exercise
 from app.models.progression import Progression
 from app.models.routine import Routine
 from app.models.set import Set
+from app.models.set_record import SetRecord
 from app.models.user import User
 from app.models.workout import Workout, WorkoutExercise
 
@@ -122,3 +123,20 @@ def create_set(
     session.add(set_)
     session.flush()
     return set_
+
+
+def create_set_record(session: Session, **overrides: object) -> SetRecord:
+    """5 reps at 60 kg by a new user, of a new library exercise, unless given"""
+    fields: dict[str, object] = {
+        "reps": 5,
+        "weight": Decimal("60"),
+        "weight_unit": WeightUnit.KG,
+    }
+    if "user" not in overrides and "user_id" not in overrides:
+        fields["user"] = create_user(session)
+    if "exercise" not in overrides and "exercise_id" not in overrides:
+        fields["exercise"] = create_exercise(session)
+    set_record = SetRecord(**(fields | overrides))
+    session.add(set_record)
+    session.flush()
+    return set_record

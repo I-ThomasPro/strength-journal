@@ -4,4 +4,4 @@ Relationships refer to other models by name (e.g. Routine.workouts -> "Workout")
 resolves once every module is loaded. Add new model modules here.
 """
 
-from app.models import exercise, progression, routine, set, user, workout  # noqa: F401
+from app.models import exercise, progression, routine, set, set_record, user, workout  # noqa: F401
