@@ -8,7 +8,7 @@ from app.config import get_settings
 from app.db import Base
 
 # Import model modules here as they're added so autogenerate can see their tables
-from app.models import user  # noqa: F401
+from app.models import exercise, user  # noqa: F401
 
 config = context.config
 

@@ -29,26 +29,44 @@ class TimestampMixin:
     )
 
 
+class TextEnum[E: StrEnum](TypeDecorator[E]):
+    """Stores a StrEnum as text. Pair every column with `enum_check()` on its table"""
+
+    impl = Text
+    cache_ok = True
+
+    def __init__(self, enum_cls: type[E]) -> None:
+        super().__init__()
+        self.enum_cls = enum_cls
+
+    def process_bind_param(self, value: E | str | None, dialect: Dialect) -> str | None:
+        # Unknown strings are passed through so the database CHECK constraint rejects them
+        return value.value if isinstance(value, self.enum_cls) else value
+
+    def process_result_value(self, value: str | None, dialect: Dialect) -> E | None:
+        return None if value is None else self.enum_cls(value)
+
+
+def enum_check(column: str, enum_cls: type[StrEnum]) -> CheckConstraint:
+    """CHECK constraint limiting a TextEnum column to the enum's values"""
+    allowed = ", ".join(f"'{member.value}'" for member in enum_cls)
+    return CheckConstraint(f"{column} IN ({allowed})", name=column)
+
+
 class WeightUnit(StrEnum):
     KG = "kg"
     LB = "lb"
 
 
-class WeightUnitType(TypeDecorator[WeightUnit]):
+class WeightUnitType(TextEnum[WeightUnit]):
     """Stores a WeightUnit as text. Pair every column with `weight_unit_check()` on its table"""
 
-    impl = Text
     cache_ok = True
 
-    def process_bind_param(self, value: WeightUnit | str | None, dialect: Dialect) -> str | None:
-        # Unknown strings are passed through so the database CHECK constraint rejects them
-        return value.value if isinstance(value, WeightUnit) else value
-
-    def process_result_value(self, value: str | None, dialect: Dialect) -> WeightUnit | None:
-        return None if value is None else WeightUnit(value)
+    def __init__(self) -> None:
+        super().__init__(WeightUnit)
 
 
 def weight_unit_check(column: str) -> CheckConstraint:
     """CHECK constraint limiting a WeightUnitType column to the known units"""
-    allowed = ", ".join(f"'{unit.value}'" for unit in WeightUnit)
-    return CheckConstraint(f"{column} IN ({allowed})", name=column)
+    return enum_check(column, WeightUnit)
