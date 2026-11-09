@@ -1,15 +1,16 @@
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import get_db, get_plain_session, request_transaction
 from app.main import app
 
 TEST_DATABASE_URL = os.environ.get(
@@ -49,11 +50,39 @@ def db_session(engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(db_session: Session) -> Iterator[TestClient]:
-    """API client whose requests use the test session"""
-    app.dependency_overrides[get_db] = lambda: db_session
+def client_for(db_session: Session) -> Iterator[Callable[[FastAPI], TestClient]]:
+    """Make an API client for an app whose requests use the test session.
+
+    Each request still gets the real request transaction, so commits, rollbacks and deferred
+    constraint checks behave as in production; the test's outer transaction undoes it all.
+    """
+    apps: list[FastAPI] = []
+
+    def request_db() -> Iterator[Session]:
+        # Treat the test's setup as committed, so a failed request only rolls back its own
+        # changes (each commit or rollback here ends a savepoint, not the test's transaction)
+        db_session.commit()
+        # Requests share the test's database transaction, and each one ends with
+        # SET CONSTRAINTS ALL IMMEDIATE, so restore the deferred default first
+        db_session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+        with request_transaction(db_session):
+            yield db_session
+
+    def make(target: FastAPI) -> TestClient:
+        target.dependency_overrides[get_db] = request_db
+        target.dependency_overrides[get_plain_session] = lambda: db_session
+        apps.append(target)
+        return TestClient(target)
+
     try:
-        with TestClient(app) as test_client:
-            yield test_client
+        yield make
     finally:
-        app.dependency_overrides.clear()
+        for target in apps:
+            target.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(client_for: Callable[[FastAPI], TestClient]) -> Iterator[TestClient]:
+    """API client for the real app, whose requests use the test session"""
+    with client_for(app) as test_client:
+        yield test_client

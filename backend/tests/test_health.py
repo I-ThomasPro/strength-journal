@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import get_plain_session
 from app.main import app
 
 
@@ -26,7 +26,7 @@ def test_health_reports_unavailable_when_database_is_unreachable() -> None:
         with Session(unreachable) as session:
             yield session
 
-    app.dependency_overrides[get_db] = unreachable_db
+    app.dependency_overrides[get_plain_session] = unreachable_db
     try:
         with TestClient(app) as test_client:
             response = test_client.get("/api/health")
@@ -43,7 +43,7 @@ def test_openapi_schema_is_served_under_api(client: TestClient) -> None:
 
     assert response.status_code == 200
     operation = response.json()["paths"]["/api/health"]["get"]
-    assert operation["operationId"] == "health-check_health"
+    assert operation["operationId"] == "health-show"
 
 
 def test_interactive_docs_are_served_under_api(client: TestClient) -> None:

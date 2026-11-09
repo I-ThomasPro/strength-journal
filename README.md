@@ -52,6 +52,45 @@ Models live in `backend/app/models/`, one module per table, and build on `app/mo
 
 Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, email=...)`).
 
+### API conventions
+**RESTful routes.** Every resource uses only the seven Rails actions, with shallow nesting: collection actions under the parent when there is one, member actions flat.
+
+| Action | Method and path | Returns |
+|---|---|---|
+| index | `GET /api/[{parents}/{parent_id}/]{resources}` | `Page[XRead]`: `{"items": [...], "total": n}` |
+| new | `GET /api/[{parents}/{parent_id}/]{resources}/new` | `NewForm`: `{"defaults": {...}, "options": {...}}` |
+| create | `POST /api/[{parents}/{parent_id}/]{resources}` | 201 `XRead` |
+| show | `GET /api/{resources}/{id}` | `XRead` |
+| edit | `GET /api/{resources}/{id}/edit` | `EditForm`: `{"values": {...}, "options": {...}}` |
+| update | `PATCH /api/{resources}/{id}` | `XRead` |
+| destroy | `DELETE /api/{resources}/{id}` | 204 |
+
+- **Singular resources** (e.g. `profile`, `session`, `health`) drop `index` and `{id}`: `GET /api/profile`, `GET /api/profile/edit`, `PATCH /api/profile`
+- **Function names:** endpoint functions are named after their action, so operation IDs read `{tag}-{action}` (e.g. `exercises-create`)
+- **No other routes:**
+  - Reordering is `update` with a `position`
+  - Copying is `create` with a source id
+  - A create that's safe to retry takes a client-supplied `id`
+- **Enforced:** `tests/test_restful_routes.py` checks every `/api` route against `app/api/restful.py`, with paths in lowercase plural nouns, hyphen-separated, nested at most one level
+
+**Form data.** `new` and `edit` return the resource's `XUpdate` fields as `defaults` or `values`, plus `options`: the allowed values of fixed-value fields, built with `enum_options(weight_unit=WeightUnit)`. Other resources (e.g. which exercise) come from their own `index`.
+
+**Requests and errors.**
+- **Transactions:** `DbSession` gives each request one transaction. It ends when the endpoint returns, before the response is sent: deferred constraints are checked, then it commits; any error rolls it back
+- **Error format:** every error is `{"detail": "...", "code": "..."}` (422s add `errors` with the invalid fields). Raise `not_found()`, `read_only()`, `invalid()` or `ApiError` from `app/api/errors.py`
+- **Database conflicts:** become 409s with codes from `CONSTRAINT_ERRORS` (e.g. `duplicate_name`, `exercise_in_use`), even when they fail at commit. Check constraints become 422 `invalid`
+
+**Helpers.**
+- **Pagination:** add `page: PageQuery` (`limit` 1–200, default 50; `offset`) and use `paginate()` from `app/api/pagination.py`
+- **Library and owned items** (`app/api/visibility.py`):
+  - `visible_to(Model, user_id)` filters a query to library items plus the user's own
+  - `get_visible_or_404()` loads one item the user can see
+  - `require_owned()` guards `edit`, `update` and `destroy`: 403 `read_only` for library items, 404 for another user's
+- **Positions:** `place()` and `remove()` in `app/models/ordering.py` keep a parent's children numbered 0, 1, 2… when inserting, moving or deleting
+- **Decimals:** weights are JSON strings like `"102.50"`, so they round-trip exactly
+
+API tests use the `client` fixture (or `client_for(app)` for a test-only app) and `assert_error()` from `backend/tests/helpers.py`.
+
 ### Layout
 ```
 backend/
@@ -60,8 +99,12 @@ backend/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── db.py            # Base, engine, get_db / DbSession dependency
 │   ├── models/          # one module per table; common.py holds shared mixins and types
+│   ├── schemas/         # Pydantic request/response models; common.py holds pages, forms, errors
 │   └── api/
 │       ├── router.py    # /api router
+│       ├── restful.py   # the RESTful route rules
+│       ├── errors.py    # error format and handlers
+│       ├── pagination.py, visibility.py
 │       └── routes/      # one module per resource
 ├── alembic/             # migration environment and versions/
 └── tests/               # factories.py builds model records for tests

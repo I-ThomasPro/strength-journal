@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
+from app.api.errors import register_error_handlers
 from app.api.router import api_router
 from app.config import get_settings
 
 
 def generate_operation_id(route: APIRoute) -> str:
-    """Name operations `{tag}-{function name}` so generated API clients read cleanly"""
+    """Name operations `{tag}-{action}` (functions are named after their action, e.g.
+    `exercises-create`), so generated API clients read cleanly"""
     tag = route.tags[0] if route.tags else "default"
     return f"{tag}-{route.name}"
 
@@ -22,6 +24,7 @@ def create_app() -> FastAPI:
         redoc_url=None,
         generate_unique_id_function=generate_operation_id,
     )
+    register_error_handlers(app)
     app.include_router(api_router)
     return app
 

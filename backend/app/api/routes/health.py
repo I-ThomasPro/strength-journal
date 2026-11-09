@@ -5,8 +5,9 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db import DbSession
+from app.db import PlainSession
 
+# A singular resource with only `show` (see app/api/restful.py)
 router = APIRouter(prefix="/health", tags=["health"])
 
 
@@ -20,7 +21,7 @@ class HealthStatus(BaseModel):
     response_model=HealthStatus,
     responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"model": HealthStatus}},
 )
-def check_health(db: DbSession, response: Response) -> HealthStatus:
+def show(db: PlainSession, response: Response) -> HealthStatus:
     """Report whether the API is up and can reach the database"""
     try:
         db.execute(text("SELECT 1"))
