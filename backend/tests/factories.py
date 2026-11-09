@@ -2,11 +2,13 @@
 
 import uuid
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.exercise import Exercise
 from app.models.routine import Routine
 from app.models.user import User
+from app.models.workout import Workout, WorkoutExercise
 
 
 def create_user(session: Session, **overrides: object) -> User:
@@ -38,3 +40,47 @@ def create_routine(session: Session, **overrides: object) -> Routine:
     session.add(routine)
     session.flush()
     return routine
+
+
+def create_workout(
+    session: Session, routine: Routine | None = None, **overrides: object
+) -> Workout:
+    """A workout appended to `routine` (a new library routine if not given)"""
+    routine = routine or create_routine(session)
+    next_position = session.scalar(
+        select(func.count()).select_from(Workout).where(Workout.routine_id == routine.id)
+    )
+    fields: dict[str, object] = {
+        "routine": routine,
+        "name": f"Workout {uuid.uuid4().hex[:12]}",
+        "position": next_position,
+    }
+    workout = Workout(**(fields | overrides))
+    session.add(workout)
+    session.flush()
+    return workout
+
+
+def create_workout_exercise(
+    session: Session,
+    workout: Workout | None = None,
+    exercise: Exercise | None = None,
+    **overrides: object,
+) -> WorkoutExercise:
+    """`exercise` (a new library exercise if not given) appended to `workout` (or a new one)"""
+    workout = workout or create_workout(session)
+    exercise = exercise or create_exercise(session)
+    next_position = session.scalar(
+        select(func.count())
+        .select_from(WorkoutExercise)
+        .where(WorkoutExercise.workout_id == workout.id)
+    )
+    fields: dict[str, object] = {
+        "workout": workout,
+        "exercise": exercise,
+        "position": next_position,
+    }
+    workout_exercise = WorkoutExercise(**(fields | overrides))
+    session.add(workout_exercise)
+    session.flush()
+    return workout_exercise
