@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+import uuid
+
+from sqlalchemy import ForeignKey, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base
+from app.models.common import TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.user import User
+
+
+class Routine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A routine in the shared library (no owner) or a user's own routine.
+
+    A Routine outlines a set of Workouts to be completed in a configured order; the Workouts
+    are added with the workouts table.
+    """
+
+    __tablename__ = "routines"
+
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # The library routine this one was copied from. Deleting the source keeps the copy
+    source_routine_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("routines.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Many-to-one only: one-to-many collections (User.routines, Routine.copies) without
+    # passive_deletes would make the ORM rewrite or delete rows the database already handles
+    owner: Mapped[User | None] = relationship()
+    source_routine: Mapped[Routine | None] = relationship(remote_side=lambda: [Routine.id])
