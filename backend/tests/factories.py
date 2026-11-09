@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.exercise import Exercise
+from app.models.routine import Routine
 from app.models.user import User
 
 
@@ -28,3 +29,12 @@ def create_exercise(session: Session, **overrides: object) -> Exercise:
     session.add(exercise)
     session.flush()
     return exercise
+
+
+def create_routine(session: Session, **overrides: object) -> Routine:
+    """A shared library routine unless `owner` or `owner_id` is given"""
+    fields: dict[str, object] = {"name": f"Routine {uuid.uuid4().hex[:12]}"}
+    routine = Routine(**(fields | overrides))
+    session.add(routine)
+    session.flush()
+    return routine
