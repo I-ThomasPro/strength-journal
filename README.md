@@ -52,6 +52,48 @@ Models live in `backend/app/models/`, one module per table, and build on `app/mo
 
 Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, email=...)`).
 
+### API conventions
+**RESTful routes.** Resources use the Rails actions by default, with shallow nesting: collection actions under the parent when there is one, member actions flat. A resource only defines the actions it needs.
+
+| Action | Method and path | Returns |
+|---|---|---|
+| index | `GET /api/[{parents}/{parent_id}/]{resources}` | `Page[XRead]`: `{"items": [...], "total": n}` |
+| new | `GET /api/[{parents}/{parent_id}/]{resources}/new` | `NewForm`: `{"defaults": {...}, "options": {...}}` |
+| create | `POST /api/[{parents}/{parent_id}/]{resources}` | 201 `XRead` |
+| show | `GET /api/{resources}/{id}` | `XRead` |
+| edit | `GET /api/{resources}/{id}/edit` | `EditForm`: `{"values": {...}, "options": {...}}` |
+| update | `PATCH /api/{resources}/{id}` | `XRead` |
+| destroy | `DELETE /api/{resources}/{id}` | 204 |
+
+- **Singular resources** (e.g. `profile`, `session`, `health`) drop `index` and `{id}`, e.g. `GET /api/profile`, `PATCH /api/profile`, `DELETE /api/session`. They're listed in `SINGULAR_RESOURCES` in `app/api/restful.py` (add new ones there), and they can't be nested or be a parent
+- **Parent parameters** are named after the parent, in singular: `/api/routines/{routine_id}/workouts`, `/api/workout-exercises/{workout_exercise_id}/sets`
+- **Function names:** endpoint functions are named after their action, so operation IDs read `{tag}-{action}` (e.g. `exercises-create`)
+- **Custom routes** are allowed when a standard action would hide what the route does. Examples: copying (`POST /api/routines/{id}/copy`), bulk reordering (`PUT .../order`), or an idempotent create-or-replace with a client-generated id (`PUT /api/set-records/{id}`)
+  - Register each one in `CUSTOM_ROUTES` in `app/api/restful.py` with the reason, in the same change that adds it
+  - Name its function after what it does (e.g. `copy`, which gives `routines-copy`), never after a standard action
+- **Enforced:** `tests/test_restful_routes.py` checks every `/api` route against `app/api/restful.py`
+  - Standard routes must fit their action's shape: lowercase nouns, hyphen-separated, nested at most one level, with singular and plural resources using their own shapes and parent parameters named after the parent
+  - Any other route must be registered
+  - A registered route that no longer exists also fails
+
+**Form data.** Only add `new` or `edit` where the server supplies defaults the client can't know, e.g. a new set's targets copied from the previous set. Fixed choices such as weight units are already in the OpenAPI schema. Where they exist, they return the resource's `XUpdate` fields as `defaults` or `values`, plus `options` built with `enum_options(weight_unit=WeightUnit)`.
+
+**Requests and errors.**
+- **Transactions:** `DbSession` gives each request one transaction. It ends when the endpoint returns, before the response is sent: deferred constraints are checked, then it commits; any error rolls it back
+- **Error format:** every error is `{"detail": "...", "code": "..."}` (422s add `errors` with the invalid fields). The OpenAPI schema documents 422s with this shape (`ErrorBody`). Raise `not_found()`, `read_only()`, `invalid()` or `ApiError` from `app/api/errors.py`
+- **Database conflicts:** become 409s with codes from `CONSTRAINT_ERRORS` (e.g. `duplicate_name`, `exercise_in_use`), even when they fail at commit. Check constraints become 422 `invalid`
+
+**Helpers.**
+- **Pagination:** add `page: PageQuery` (`limit` 1–200, default 50; `offset`) and use `paginate()` from `app/api/pagination.py`
+- **Library and owned items** (`app/api/visibility.py`):
+  - `visible_to(Model, user_id)` filters a query to library items plus the user's own
+  - `get_visible_or_404()` loads one item the user can see
+  - `require_owned()` guards `edit`, `update` and `destroy`: 403 `read_only` for library items, 404 for another user's
+- **Positions:** `place()` and `remove()` in `app/models/ordering.py` keep a parent's children numbered 0, 1, 2… when inserting, moving or deleting
+- **Decimals:** weights are JSON strings like `"102.50"`, so they round-trip exactly
+
+API tests use the `client` fixture (or `client_for(app)` for a test-only app) and `assert_error()` from `backend/tests/helpers.py`.
+
 ### Layout
 ```
 backend/
@@ -60,8 +102,12 @@ backend/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── db.py            # Base, engine, get_db / DbSession dependency
 │   ├── models/          # one module per table; common.py holds shared mixins and types
+│   ├── schemas/         # Pydantic request/response models; common.py holds pages, forms, errors
 │   └── api/
 │       ├── router.py    # /api router
+│       ├── restful.py   # the RESTful route rules
+│       ├── errors.py    # error format and handlers
+│       ├── pagination.py, visibility.py
 │       └── routes/      # one module per resource
 ├── alembic/             # migration environment and versions/
 └── tests/               # factories.py builds model records for tests
