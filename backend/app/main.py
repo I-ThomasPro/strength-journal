@@ -3,6 +3,7 @@ from fastapi.routing import APIRoute
 
 from app.api.errors import register_error_handlers
 from app.api.router import api_router
+from app.auth.guards import register_request_guards
 from app.config import get_settings
 from app.schemas.common import ErrorBody
 
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
         responses={422: {"model": ErrorBody, "description": "Validation error"}},
     )
     register_error_handlers(app)
+    register_request_guards(app)
     app.include_router(api_router)
     return app
 

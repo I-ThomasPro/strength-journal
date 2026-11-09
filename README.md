@@ -92,7 +92,24 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
 - **Positions:** `place()` and `remove()` in `app/models/ordering.py` keep a parent's children numbered 0, 1, 2… when inserting, moving or deleting
 - **Decimals:** weights are JSON strings like `"102.50"`, so they round-trip exactly
 
-API tests use the `client` fixture (or `client_for(app)` for a test-only app) and `assert_error()` from `backend/tests/helpers.py`.
+API tests use the `client` fixture (or `client_for(app)` for a test-only app) and `assert_error()` from `backend/tests/helpers.py`. For endpoints that need a login, use `logged_in_client`, which is logged in as `current_user` (password `TEST_PASSWORD`) and sends the CSRF header.
+
+### Accounts and sessions
+Sign-up is invite-only. Create a single-use code (valid 7 days unless `--days` is given):
+```bash
+cd backend
+uv run python -m app.cli create-invite
+```
+
+- **Sign up:** `POST /api/registration` `{invite_code, email, password, display_name, weight_unit?}`
+- **Log in:** `POST /api/session` `{email, password}`; check who's logged in with `GET /api/session`; log out with `DELETE /api/session`
+- **Passwords:** hashed with Argon2 (`pwdlib`), at least 10 characters
+- **Sessions:**
+  - Stored in Postgres (`user_sessions`), with only a SHA-256 of the cookie token
+  - The cookie is HttpOnly, SameSite=Lax and Secure (unless `COOKIE_SECURE=false`)
+  - Sessions last `SESSION_DAYS` (30), and the expiry moves forward on use, at most hourly
+- **CSRF:** the frontend sends the `csrf_token` from `GET /api/session` as an `X-CSRF-Token` header on every POST/PUT/PATCH/DELETE. Separately, unsafe requests are rejected if their `Origin` isn't `ALLOWED_ORIGIN`, or if their body isn't JSON
+- **Code:** endpoints get the logged-in user with the `CurrentUser` dependency from `app/auth/sessions.py` (401 `not_authenticated` without a session)
 
 ### Layout
 ```
@@ -101,6 +118,8 @@ backend/
 │   ├── main.py          # create_app(): routers, docs under /api
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── db.py            # Base, engine, get_db / DbSession dependency
+│   ├── cli.py           # admin commands (create-invite)
+│   ├── auth/            # passwords, sessions + CurrentUser, invites, request guards
 │   ├── models/          # one module per table; common.py holds shared mixins and types
 │   ├── schemas/         # Pydantic request/response models; common.py holds pages, forms, errors
 │   └── api/
