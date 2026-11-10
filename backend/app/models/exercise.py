@@ -47,3 +47,8 @@ class Exercise(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             postgresql_nulls_not_distinct=True,
         ),
     )
+
+    @property
+    def is_library(self) -> bool:
+        """A shared library exercise: visible to everyone, changed by no one through the API"""
+        return self.owner_id is None
