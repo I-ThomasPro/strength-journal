@@ -1,7 +1,7 @@
 """Response shapes shared by every resource: errors, pages and the new/edit form data"""
 
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,9 +34,16 @@ def omitted() -> Any:
 class UpdateModel(BaseModel):
     """Base for `XUpdate` (PATCH) bodies: only the fields sent are changed"""
 
-    def apply_to(self, item: object) -> None:
-        for field, value in self.model_dump(exclude_unset=True).items():
+    def apply_to(self, item: object, exclude: set[str] | None = None) -> None:
+        """Set the fields sent on `item`, except those in `exclude` (e.g. `position`, which
+        moves the item with `place()` instead)"""
+        for field, value in self.model_dump(exclude_unset=True, exclude=exclude).items():
             setattr(item, field, value)
+
+
+# Where an ordered child goes among its siblings, from 0. One past the end (or more) puts it
+# last; see app/models/ordering.py
+Position = Annotated[int, Field(ge=0)]
 
 
 class Page[T](BaseModel):
