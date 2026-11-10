@@ -96,6 +96,10 @@ def not_authenticated() -> ApiError:
     return ApiError(status.HTTP_401_UNAUTHORIZED, "not_authenticated", "You're not logged in")
 
 
+def invalid_credentials(detail: str = "Wrong email or password") -> ApiError:
+    return ApiError(status.HTTP_401_UNAUTHORIZED, "invalid_credentials", detail)
+
+
 def get_current_session(request: Request, response: Response, db: DbSession) -> UserSession:
     """The logged-in session: 401 without one, 403 on an unsafe request without its CSRF token"""
     token = request.cookies.get(get_settings().session_cookie_name)

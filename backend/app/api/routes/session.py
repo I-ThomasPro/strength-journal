@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 
-from app.api.errors import ApiError
 from app.auth.security import verify_dummy_password, verify_password
 from app.auth.sessions import (
     CurrentSession,
     clear_session_cookie,
+    invalid_credentials,
     require_csrf_if_logged_in,
     set_session_cookie,
     start_session,
@@ -16,10 +16,6 @@ from app.schemas.auth import SessionCreate, SessionRead, UserRead
 
 # A singular resource: the current login (see app/api/restful.py)
 router = APIRouter(prefix="/session", tags=["session"])
-
-
-def invalid_credentials() -> ApiError:
-    return ApiError(status.HTTP_401_UNAUTHORIZED, "invalid_credentials", "Wrong email or password")
 
 
 @router.post(
