@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, StringConstraints
@@ -13,14 +12,6 @@ ExerciseName = Annotated[
 ]
 
 
-class ExerciseScope(StrEnum):
-    """Which exercises `index` lists"""
-
-    ALL = "all"  # the library plus the user's own
-    LIBRARY = "library"
-    MINE = "mine"
-
-
 class ExerciseCreate(BaseModel):
     name: ExerciseName
     type: ExerciseType = ExerciseType.STRENGTH
@@ -29,6 +20,14 @@ class ExerciseCreate(BaseModel):
 class ExerciseUpdate(UpdateModel):
     name: ExerciseName = omitted()
     type: ExerciseType = omitted()
+
+
+class ExerciseSummary(ReadModel):
+    """An exercise as it appears inside a workout or progression"""
+
+    id: uuid.UUID
+    name: str
+    type: ExerciseType
 
 
 class ExerciseRead(ReadModel):

@@ -6,6 +6,7 @@
 """
 
 import uuid
+from enum import StrEnum
 from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, or_
@@ -18,9 +19,28 @@ class Owned(Protocol):
     owner_id: Any
 
 
+class Scope(StrEnum):
+    """Which items an `index` lists, as its `scope` query parameter"""
+
+    ALL = "all"  # the library plus the user's own
+    LIBRARY = "library"
+    MINE = "mine"
+
+
 def visible_to(model: Any, user_id: uuid.UUID) -> ColumnElement[bool]:
     """Filter for `select(model)`: library items plus the user's own"""
     return or_(model.owner_id.is_(None), model.owner_id == user_id)
+
+
+def in_scope(model: Any, scope: Scope, user_id: uuid.UUID) -> ColumnElement[bool]:
+    """Filter for `select(model)` by `scope`; every scope is limited to what the user can see"""
+    match scope:
+        case Scope.ALL:
+            return visible_to(model, user_id)
+        case Scope.LIBRARY:
+            return model.owner_id.is_(None)
+        case Scope.MINE:
+            return model.owner_id == user_id
 
 
 def get_visible_or_404[M: Owned](

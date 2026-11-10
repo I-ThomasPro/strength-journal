@@ -11,6 +11,7 @@ from app.models.common import TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.user import User
 
 if TYPE_CHECKING:
+    from app.models.progression import Progression
     from app.models.workout import Workout
 
 
@@ -43,3 +44,13 @@ class Routine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    # Read-only, for loading a routine's detail: viewonly never writes, so the database's
+    # ON DELETE CASCADE stays in charge of deleting them
+    progressions: Mapped[list[Progression]] = relationship(
+        viewonly=True, order_by="(Progression.created_at, Progression.id)"
+    )
+
+    @property
+    def is_library(self) -> bool:
+        """A shared library routine: visible to everyone, changed by no one through the API"""
+        return self.owner_id is None

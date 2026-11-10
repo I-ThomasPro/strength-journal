@@ -56,7 +56,7 @@ class Progression(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default=ProgressionCondition.ALL_SETS_COMPLETED.value,
     )
 
-    # Many-to-one only: Routine.progressions / Exercise.progressions collections without
+    # Many-to-one only (Routine.progressions is viewonly): writable collections without
     # passive_deletes would make the ORM rewrite rows the database already handles
     routine: Mapped[Routine] = relationship()
     exercise: Mapped[Exercise] = relationship()
