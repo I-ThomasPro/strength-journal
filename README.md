@@ -89,10 +89,12 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
 - **Pagination:** add `page: PageQuery` (`limit` 1–200, default 50; `offset`) and use `paginate()` from `app/api/pagination.py`
 - **Library and owned items** (`app/api/visibility.py`):
   - `visible_to(Model, user_id)` filters a query to library items plus the user's own
+  - `in_scope(Model, scope, user_id)` filters an `index` by its `scope: Scope = Scope.ALL` query parameter (`all`, `library` or `mine`)
   - `get_visible_or_404()` loads one item the user can see
   - `require_owned()` guards `edit`, `update` and `destroy`: 403 `read_only` for library items, 404 for another user's
 - **Positions:** `place()` and `remove()` in `app/models/ordering.py` keep a parent's children numbered 0, 1, 2… when inserting, moving or deleting
 - **Decimals:** weights are JSON strings like `"102.50"`, so they round-trip exactly
+- **Nested responses:** load every level with `selectinload`/`joinedload` options (see `DETAIL_OPTIONS` in `app/api/routes/routines.py`), so a response takes the same number of queries whatever its size. `tests/test_routines.py` checks this by counting queries
 
 API tests use the `client` fixture (or `client_for(app)` for a test-only app) and `assert_error()` from `backend/tests/helpers.py`. For endpoints that need a login, use `logged_in_client`, which is logged in as `current_user` (password `TEST_PASSWORD`) and sends the CSRF header.
 

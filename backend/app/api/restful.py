@@ -29,7 +29,8 @@ import re
 from collections.abc import Iterable, Mapping
 
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
+from starlette.routing import BaseRoute
 
 API_PREFIX = "/api"
 NAME = re.compile(r"^[a-z]+(-[a-z]+)*$")
@@ -148,19 +149,23 @@ def route_violation(
     return None
 
 
-def _api_routes(routes: Iterable[object]) -> Iterable[tuple[str, str, str]]:
-    """(method, path, name) for every API route; docs and OpenAPI routes aren't APIRoutes"""
-    for route in routes:
-        if isinstance(route, APIRoute) and route.path.startswith(API_PREFIX):
-            for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
-                yield method, route.path, route.name
+def api_routes(routes: Iterable[BaseRoute]) -> Iterable[tuple[str, str, str]]:
+    """(method, path, name) for every API route; docs and OpenAPI routes aren't APIRoutes.
+
+    FastAPI keeps an included router as one wrapper in `app.routes`, so this goes through
+    `iter_route_contexts()`, which yields each route inside with its full path.
+    """
+    for context in iter_route_contexts(list(routes)):
+        if isinstance(context.original_route, APIRoute) and context.path.startswith(API_PREFIX):
+            for method in sorted(set(context.methods or ()) - {"HEAD", "OPTIONS"}):
+                yield method, context.path, context.name
 
 
 def route_violations(
-    routes: Iterable[object], custom_routes: Mapping[tuple[str, str], str] = CUSTOM_ROUTES
+    routes: Iterable[BaseRoute], custom_routes: Mapping[tuple[str, str], str] = CUSTOM_ROUTES
 ) -> list[str]:
     problems = []
-    for method, path, name in _api_routes(routes):
+    for method, path, name in api_routes(routes):
         problem = route_violation(method, path, name, custom_routes)
         if problem:
             problems.append(problem)
@@ -168,10 +173,10 @@ def route_violations(
 
 
 def stale_custom_routes(
-    routes: Iterable[object], custom_routes: Mapping[tuple[str, str], str] = CUSTOM_ROUTES
+    routes: Iterable[BaseRoute], custom_routes: Mapping[tuple[str, str], str] = CUSTOM_ROUTES
 ) -> list[tuple[str, str]]:
     """Registered custom routes that no longer exist, so the register can't go stale"""
-    existing = {(method, path) for method, path, _name in _api_routes(routes)}
+    existing = {(method, path) for method, path, _name in api_routes(routes)}
     return sorted(set(custom_routes) - existing)
 
 

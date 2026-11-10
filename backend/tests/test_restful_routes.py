@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.restful import (
+    api_routes,
     app_route_violations,
     route_violation,
     route_violations,
@@ -17,6 +18,23 @@ UPSERT = ("PUT", "/api/set-records/{id}")
 
 def test_every_api_route_follows_the_rules() -> None:
     assert app_route_violations(app) == []
+
+
+def test_the_rules_see_routes_in_included_routers() -> None:
+    # FastAPI keeps included routers as wrappers in app.routes, so a check that only looked at
+    # app.routes itself would pass without seeing any /api route
+    assert ("GET", "/api/health", "show") in set(api_routes(app.routes))
+    test_app = create_app()
+    things = APIRouter(prefix="/things", tags=["things"])
+
+    @things.get("/{id}")
+    def get_thing() -> None: ...
+
+    api = APIRouter(prefix="/api")
+    api.include_router(things)
+    test_app.include_router(api)
+
+    assert any("GET /api/things/{id} (get_thing)" in p for p in app_route_violations(test_app))
 
 
 @pytest.mark.parametrize(
