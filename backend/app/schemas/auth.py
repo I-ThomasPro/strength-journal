@@ -1,11 +1,12 @@
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, StringConstraints
 
 from app.auth.security import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from app.models.common import WeightUnit
-from app.schemas.common import ReadModel
+from app.schemas.common import ReadModel, UpdateModel, omitted
 
 Email = Annotated[
     str,
@@ -27,10 +28,13 @@ class RegistrationCreate(BaseModel):
     weight_unit: WeightUnit = WeightUnit.KG
 
 
+# Any length is accepted when checking a password; a wrong one just fails to match
+GivenPassword = Annotated[str, StringConstraints(max_length=MAX_PASSWORD_LENGTH)]
+
+
 class SessionCreate(BaseModel):
     email: Email
-    # Any length is accepted here; a wrong password just fails to match
-    password: Annotated[str, StringConstraints(max_length=MAX_PASSWORD_LENGTH)]
+    password: GivenPassword
 
 
 class UserRead(ReadModel):
@@ -45,3 +49,24 @@ class SessionRead(BaseModel):
 
     user: UserRead
     csrf_token: str
+
+
+class ProfileUpdate(UpdateModel):
+    display_name: DisplayName = omitted()
+    weight_unit: WeightUnit = omitted()
+
+
+class PasswordUpdate(BaseModel):
+    current_password: GivenPassword
+    # The same rules as sign-up
+    new_password: Password
+
+
+class UserSessionRead(BaseModel):
+    """One of the user's logins. `last_seen_at` is accurate to the hour"""
+
+    id: uuid.UUID
+    created_at: datetime
+    last_seen_at: datetime
+    # True for the session making this request
+    current: bool

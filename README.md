@@ -78,6 +78,8 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
 
 **Form data.** Only add `new` or `edit` where the server supplies defaults the client can't know, e.g. a new set's targets copied from the previous set. Fixed choices such as weight units are already in the OpenAPI schema. Where they exist, they return the resource's `XUpdate` fields as `defaults` or `values`, plus `options` built with `enum_options(weight_unit=WeightUnit)`.
 
+**Update bodies.** `PATCH` changes only the fields sent. `XUpdate` schemas extend `UpdateModel` and call `body.apply_to(item)`. A field that can't be null is declared `name: Name = omitted()`: it can be left out, but sending null is a 422. A field that can be cleared is `X | None = None`.
+
 **Requests and errors.**
 - **Transactions:** `DbSession` gives each request one transaction. It ends when the endpoint returns, before the response is sent: deferred constraints are checked, then it commits; any error rolls it back
 - **Error format:** every error is `{"detail": "...", "code": "..."}` (422s add `errors` with the invalid fields). The OpenAPI schema documents 422s with this shape (`ErrorBody`). Raise `not_found()`, `read_only()`, `invalid()` or `ApiError` from `app/api/errors.py`
@@ -103,6 +105,9 @@ uv run python -m app.cli create-invite
 
 - **Sign up:** `POST /api/registration` `{invite_code, email, password, display_name, weight_unit?}`
 - **Log in:** `POST /api/session` `{email, password}`; check who's logged in with `GET /api/session`; log out with `DELETE /api/session`
+- **Profile:** `GET /api/profile`; `PATCH /api/profile` `{display_name?, weight_unit?}`
+- **Password:** `PATCH /api/password` `{current_password, new_password}` (401 `invalid_credentials` if the current one is wrong). It logs out every other device
+- **Devices:** `GET /api/sessions` lists the user's logins (`current` marks this one); `DELETE /api/sessions/{id}` logs one out
 - **Passwords:** hashed with Argon2 (`pwdlib`), at least 10 characters
 - **Sessions:**
   - Stored in Postgres (`user_sessions`), with only a SHA-256 of the cookie token
