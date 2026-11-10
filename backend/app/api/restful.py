@@ -56,7 +56,11 @@ ACTIONS: dict[str, tuple[str, Shapes, Shapes]] = {
 
 # Routes outside the standard actions: (method, path) -> why a standard action doesn't fit.
 # Add an entry in the same change that adds the route.
-CUSTOM_ROUTES: dict[tuple[str, str], str] = {}
+REORDER = "Replaces the whole order in one request, which `PATCH position` can't"
+CUSTOM_ROUTES: dict[tuple[str, str], str] = {
+    ("PUT", "/api/routines/{routine_id}/workouts/order"): REORDER,
+    ("PUT", "/api/workouts/{workout_id}/workout-exercises/order"): REORDER,
+}
 
 
 def parent_id_param(parent: str) -> str:
