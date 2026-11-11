@@ -27,6 +27,13 @@ class RoutineUpdate(UpdateModel):
     description: Description = None
 
 
+class RoutineCopy(BaseModel):
+    """Both default to the original's. Sending `description: null` leaves the copy without one"""
+
+    name: RoutineName | None = None
+    description: Description = None
+
+
 class RoutineFields(ReadModel):
     id: uuid.UUID
     name: str

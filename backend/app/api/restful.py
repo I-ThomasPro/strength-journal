@@ -58,6 +58,9 @@ ACTIONS: dict[str, tuple[str, Shapes, Shapes]] = {
 # Add an entry in the same change that adds the route.
 REORDER = "Replaces the whole order in one request, which `PATCH position` can't"
 CUSTOM_ROUTES: dict[tuple[str, str], str] = {
+    ("POST", "/api/routines/{id}/copy"): (
+        "Copies a routine and all its contents, which `create` doesn't express"
+    ),
     ("PUT", "/api/routines/{routine_id}/workouts/order"): REORDER,
     ("PUT", "/api/workouts/{workout_id}/workout-exercises/order"): REORDER,
     ("PUT", "/api/workout-exercises/{workout_exercise_id}/sets/order"): REORDER,
