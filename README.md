@@ -97,7 +97,7 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
   - `PATCH` with `position` moves one item
   - `PUT .../order` with every child's id replaces the whole order (`reorder()` in `app/api/routine_parts.py` gives a 422 unless each child is listed exactly once)
 - **A routine's parts** (`app/api/routine_parts.py`): `get_workout()` and `get_workout_exercise()` load one only if its routine is visible; changes then need `require_owned(routine, user_id)`. `get_usable_exercise()` gives a 422 for an exercise the user can't see
-- **Decimals:** weights are JSON strings like `"102.50"`, so they round-trip exactly
+- **Decimals:** weights are JSON strings like `"102.50"`, so they round-trip exactly. Request fields use `Weight` from `app/schemas/common.py` (0 to 9999.99, matching the columns), which keeps two decimal places, so a weight sent as `102.5` comes back as `"102.50"`
 - **Nested responses:** load every level with `selectinload`/`joinedload` options (see `DETAIL_OPTIONS` in `app/api/routes/routines.py`), so a response takes the same number of queries whatever its size. `tests/test_routines.py` checks this by counting queries
 
 API tests use the `client` fixture (or `client_for(app)` for a test-only app) and `assert_error()` from `backend/tests/helpers.py`. For endpoints that need a login, use `logged_in_client`, which is logged in as `current_user` (password `TEST_PASSWORD`) and sends the CSRF header.
