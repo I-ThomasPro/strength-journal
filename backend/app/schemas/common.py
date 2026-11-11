@@ -1,9 +1,10 @@
 """Response shapes shared by every resource: errors, pages and the new/edit form data"""
 
+from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 
 class ErrorBody(BaseModel):
@@ -44,6 +45,15 @@ class UpdateModel(BaseModel):
 # Where an ordered child goes among its siblings, from 0. One past the end (or more) puts it
 # last; see app/models/ordering.py
 Position = Annotated[int, Field(ge=0)]
+
+
+def two_places(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"))
+
+
+# A weight as stored (NUMERIC(6, 2)): 0 to 9999.99, kept to two decimal places so responses
+# read "102.50" whether the client sent 102.5 or "102.50"
+Weight = Annotated[Decimal, Field(ge=0, max_digits=6, decimal_places=2), AfterValidator(two_places)]
 
 
 class Page[T](BaseModel):
