@@ -59,6 +59,10 @@ ACTIONS: dict[str, tuple[str, Shapes, Shapes]] = {
 REORDER = "Replaces the whole order in one request, which `PATCH position` can't"
 CUSTOM_ROUTES: dict[tuple[str, str], str] = {
     ("PUT", "/api/routines/{routine_id}/workouts/order"): REORDER,
+    ("PUT", "/api/set-records/{id}"): (
+        "Idempotent create-or-replace with a client-generated id, so logging is safe to retry "
+        "after a dropped connection"
+    ),
     ("PUT", "/api/workouts/{workout_id}/workout-exercises/order"): REORDER,
 }
 
