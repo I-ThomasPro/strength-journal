@@ -1,4 +1,4 @@
-"""Loading a routine's parts (workouts, workout exercises) under the routine's visibility rules
+"""Loading a routine's parts (workouts, workout exercises, sets) with its visibility rules
 
 - Reading follows the routine: library routines' parts and the user's own
 - Changing needs the user's own routine: pass the routine to `require_owned()`, which gives
@@ -17,6 +17,7 @@ from app.api.visibility import visible_to
 from app.models.exercise import Exercise
 from app.models.ordering import renumber
 from app.models.routine import Routine
+from app.models.set import Set
 from app.models.workout import Workout, WorkoutExercise
 
 
@@ -41,6 +42,20 @@ def get_workout_exercise(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> Work
     if workout_exercise is None:
         raise not_found()
     return workout_exercise
+
+
+def get_set(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> Set:
+    """A set in a routine the user can see; 404 otherwise"""
+    set_ = db.scalar(
+        select(Set)
+        .join(Set.workout_exercise)
+        .join(WorkoutExercise.workout)
+        .join(Workout.routine)
+        .where(Set.id == id, visible_to(Routine, user_id))
+    )
+    if set_ is None:
+        raise not_found()
+    return set_
 
 
 def get_usable_exercise(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> Exercise:

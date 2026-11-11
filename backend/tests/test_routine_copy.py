@@ -1,0 +1,214 @@
+"""Copying a routine with all its contents"""
+
+import uuid
+from decimal import Decimal
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.models.common import WeightUnit
+from app.models.exercise import Exercise
+from app.models.routine import Routine
+from app.models.user import User
+from tests.factories import (
+    create_exercise,
+    create_progression,
+    create_routine,
+    create_set,
+    create_user,
+    create_workout,
+    create_workout_exercise,
+)
+from tests.helpers import assert_error
+
+
+def build_source(db_session: Session, owner: User | None = None) -> Routine:
+    """Two workouts of two exercises with two sets each, plus two progressions. Each level is
+    created out of order (later positions first) so copying in creation order would show"""
+    routine = create_routine(
+        db_session, name="Starting Strength", description="Three days a week", owner=owner
+    )
+    squat = create_exercise(db_session, name=f"Squat {uuid.uuid4().hex[:6]}")
+    press = create_exercise(db_session, name=f"Press {uuid.uuid4().hex[:6]}")
+    for workout_position, name in [(1, "Day B"), (0, "Day A")]:
+        workout = create_workout(db_session, routine, name=name, position=workout_position)
+        for entry_position, exercise in [(1, press), (0, squat)]:
+            entry = create_workout_exercise(db_session, workout, exercise, position=entry_position)
+            for set_position, reps in [(1, 3), (0, 5)]:
+                create_set(
+                    db_session,
+                    entry,
+                    position=set_position,
+                    target_reps=reps,
+                    target_weight=Decimal("60") + workout_position * 10 + set_position,
+                    weight_unit=WeightUnit.LB if entry_position else WeightUnit.KG,
+                )
+    create_progression(db_session, routine=routine, exercise=squat, increment=Decimal("5"))
+    create_progression(
+        db_session, routine=routine, exercise=press, increment=Decimal("2.5"), increment_unit="lb"
+    )
+    return routine
+
+
+def contents(detail: dict) -> dict:
+    """A routine detail without ids, timestamps or ownership, to compare a copy's contents"""
+    return {
+        "workouts": [
+            {
+                "name": workout["name"],
+                "position": workout["position"],
+                "exercises": [
+                    {
+                        "position": entry["position"],
+                        "exercise": entry["exercise"],
+                        "sets": [
+                            {
+                                key: set_[key]
+                                for key in (
+                                    "position",
+                                    "target_reps",
+                                    "target_weight",
+                                    "weight_unit",
+                                )
+                            }
+                            for set_ in entry["sets"]
+                        ],
+                    }
+                    for entry in workout["exercises"]
+                ],
+            }
+            for workout in detail["workouts"]
+        ],
+        "progressions": sorted(
+            (p["exercise"]["id"], p["increment"], p["increment_unit"], p["condition"])
+            for p in detail["progressions"]
+        ),
+    }
+
+
+def copy_path(routine: Routine) -> str:
+    return f"/api/routines/{routine.id}/copy"
+
+
+def test_copying_a_library_routine_copies_everything_in_order(
+    logged_in_client: TestClient, db_session: Session, current_user: User
+) -> None:
+    source = build_source(db_session)
+    original = logged_in_client.get(f"/api/routines/{source.id}").json()
+
+    response = logged_in_client.post(copy_path(source), json={})
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert contents(body) == contents(original)
+    assert [w["name"] for w in body["workouts"]] == ["Day A", "Day B"]
+    assert [s["target_reps"] for s in body["workouts"][0]["exercises"][0]["sets"]] == [5, 3]
+    assert len(body["progressions"]) == 2
+    # New rows throughout, in a routine the user owns that links back to its source
+    assert body["id"] != original["id"]
+    assert body["workouts"][0]["id"] != original["workouts"][0]["id"]
+    assert (body["name"], body["description"]) == ("Starting Strength", "Three days a week")
+    assert body["is_library"] is False
+    assert body["source_routine_id"] == str(source.id)
+    copy = db_session.get(Routine, uuid.UUID(body["id"]))
+    assert copy is not None and copy.owner_id == current_user.id
+
+
+def test_exercises_are_referenced_not_copied(
+    logged_in_client: TestClient, db_session: Session
+) -> None:
+    source = build_source(db_session)
+    exercises_before = db_session.scalar(select(func.count()).select_from(Exercise))
+
+    body = logged_in_client.post(copy_path(source), json={}).json()
+
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(Exercise)) == exercises_before
+    assert body["workouts"][0]["exercises"][0]["exercise"]["id"] in {
+        str(exercise_id) for exercise_id in db_session.scalars(select(Exercise.id))
+    }
+
+
+def test_the_name_and_description_can_be_changed_or_cleared(
+    logged_in_client: TestClient, db_session: Session
+) -> None:
+    source = build_source(db_session)
+
+    renamed = logged_in_client.post(copy_path(source), json={"name": "  My 5x5  "}).json()
+    cleared = logged_in_client.post(copy_path(source), json={"description": None}).json()
+
+    assert (renamed["name"], renamed["description"]) == ("My 5x5", "Three days a week")
+    assert (cleared["name"], cleared["description"]) == ("Starting Strength", None)
+
+
+@pytest.mark.parametrize("body", [{"name": "  "}, {"name": "x" * 101}])
+def test_an_invalid_copy_name_is_rejected(
+    logged_in_client: TestClient, db_session: Session, body: dict
+) -> None:
+    source = build_source(db_session)
+
+    assert_error(logged_in_client.post(copy_path(source), json=body), 422, "invalid")
+
+
+def test_editing_the_copy_leaves_the_original_alone(
+    logged_in_client: TestClient, db_session: Session
+) -> None:
+    source = build_source(db_session)
+    before = logged_in_client.get(f"/api/routines/{source.id}").json()
+    copy = logged_in_client.post(copy_path(source), json={}).json()
+    first_workout = copy["workouts"][0]
+    first_entry = first_workout["exercises"][0]
+
+    edits = [
+        logged_in_client.patch(f"/api/routines/{copy['id']}", json={"name": "Changed"}),
+        logged_in_client.patch(f"/api/workouts/{first_workout['id']}", json={"name": "Legs"}),
+        logged_in_client.delete(f"/api/workout-exercises/{first_entry['id']}"),
+        logged_in_client.delete(f"/api/workouts/{copy['workouts'][1]['id']}"),
+    ]
+
+    assert [response.status_code for response in edits] == [200, 200, 204, 204]
+    after = logged_in_client.get(f"/api/routines/{source.id}").json()
+    assert contents(after) == contents(before)
+    assert after["name"] == "Starting Strength"
+
+
+def test_the_users_own_routine_can_be_copied(
+    logged_in_client: TestClient, db_session: Session, current_user: User
+) -> None:
+    source = build_source(db_session, owner=current_user)
+
+    response = logged_in_client.post(copy_path(source), json={"name": "Deload week"})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["source_routine_id"] == str(source.id)
+    assert len(response.json()["workouts"]) == 2
+
+
+def test_an_empty_routine_can_be_copied(logged_in_client: TestClient, db_session: Session) -> None:
+    source = create_routine(db_session, name="Blank")
+
+    body = logged_in_client.post(copy_path(source), json={}).json()
+
+    assert (body["name"], body["workouts"], body["progressions"]) == ("Blank", [], [])
+
+
+def test_another_users_routine_cant_be_copied(
+    logged_in_client: TestClient, db_session: Session
+) -> None:
+    theirs = build_source(db_session, owner=create_user(db_session))
+    routines_before = db_session.scalar(select(func.count()).select_from(Routine))
+
+    assert_error(logged_in_client.post(copy_path(theirs), json={}), 404, "not_found")
+    assert_error(
+        logged_in_client.post(f"/api/routines/{uuid.uuid4()}/copy", json={}), 404, "not_found"
+    )
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(Routine)) == routines_before
+
+
+def test_copying_needs_a_login(client: TestClient, db_session: Session) -> None:
+    source = create_routine(db_session)
+
+    assert_error(client.post(copy_path(source), json={}), 401, "not_authenticated")

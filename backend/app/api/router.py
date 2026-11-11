@@ -11,6 +11,7 @@ from app.api.routes import (
     session,
     sessions,
     set_records,
+    sets,
     workout_exercises,
     workouts,
 )
@@ -27,4 +28,5 @@ api_router.include_router(routines.router)
 api_router.include_router(workouts.router)
 api_router.include_router(workout_exercises.router)
 api_router.include_router(progressions.router)
+api_router.include_router(sets.router)
 api_router.include_router(set_records.router)
