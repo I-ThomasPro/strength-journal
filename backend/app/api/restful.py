@@ -60,6 +60,7 @@ REORDER = "Replaces the whole order in one request, which `PATCH position` can't
 CUSTOM_ROUTES: dict[tuple[str, str], str] = {
     ("PUT", "/api/routines/{routine_id}/workouts/order"): REORDER,
     ("PUT", "/api/workouts/{workout_id}/workout-exercises/order"): REORDER,
+    ("PUT", "/api/workout-exercises/{workout_exercise_id}/sets/order"): REORDER,
 }
 
 
