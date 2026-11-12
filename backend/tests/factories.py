@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.common import WeightUnit
 from app.models.exercise import Exercise
 from app.models.routine import Routine
+from app.models.routine_workout import RoutineWorkout
 from app.models.set import Set
 from app.models.set_record import SetRecord
 from app.models.user import User
@@ -49,20 +50,34 @@ def create_routine(session: Session, **overrides: object) -> Routine:
 def create_workout(
     session: Session, routine: Routine | None = None, **overrides: object
 ) -> Workout:
-    """A workout appended to `routine` (a new library routine if not given)"""
+    """A workout in `routine` (a new library routine if not given), in no slot of its cycle"""
     routine = routine or create_routine(session)
-    next_position = session.scalar(
-        select(func.count()).select_from(Workout).where(Workout.routine_id == routine.id)
-    )
-    fields: dict[str, object] = {
-        "routine": routine,
-        "name": f"Workout {uuid.uuid4().hex[:12]}",
-        "position": next_position,
-    }
+    fields: dict[str, object] = {"routine": routine, "name": f"Workout {uuid.uuid4().hex[:12]}"}
     workout = Workout(**(fields | overrides))
     session.add(workout)
     session.flush()
     return workout
+
+
+def create_routine_workout(
+    session: Session, workout: Workout | None = None, **overrides: object
+) -> RoutineWorkout:
+    """A slot for `workout` (a new one if not given) at the end of its routine's cycle"""
+    workout = workout or create_workout(session)
+    next_position = session.scalar(
+        select(func.count())
+        .select_from(RoutineWorkout)
+        .where(RoutineWorkout.routine_id == workout.routine_id)
+    )
+    fields: dict[str, object] = {
+        "routine_id": workout.routine_id,
+        "workout": workout,
+        "position": next_position,
+    }
+    slot = RoutineWorkout(**(fields | overrides))
+    session.add(slot)
+    session.flush()
+    return slot
 
 
 def create_workout_exercise(

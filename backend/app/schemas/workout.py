@@ -12,21 +12,13 @@ WorkoutName = Annotated[str, StringConstraints(strip_whitespace=True, min_length
 
 
 class WorkoutCreate(BaseModel):
+    """A workout in the routine. Add it to the routine's cycle with a slot (routine-workouts)"""
+
     name: WorkoutName
-    # Without one, the workout is added at the end
-    position: Position | None = None
 
 
 class WorkoutUpdate(UpdateModel):
     name: WorkoutName = omitted()
-    # Moves the workout; the others shift to make room
-    position: Position = omitted()
-
-
-class WorkoutOrder(BaseModel):
-    """Every one of the routine's workouts, in their new order"""
-
-    workout_ids: list[uuid.UUID]
 
 
 class WorkoutExerciseCreate(BaseModel):
@@ -49,11 +41,17 @@ class WorkoutExerciseOrder(BaseModel):
     workout_exercise_ids: list[uuid.UUID]
 
 
+class WorkoutSummary(ReadModel):
+    """A workout as it appears in a routine's cycle"""
+
+    id: uuid.UUID
+    name: str
+
+
 class WorkoutRead(ReadModel):
     id: uuid.UUID
     routine_id: uuid.UUID
     name: str
-    position: int
     created_at: datetime
     updated_at: datetime
 

@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 
 
 class Workout(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """One workout in a Routine's configured order, outlining Exercises to complete in order"""
+    """A workout in a Routine, outlining Exercises to complete in order. Where it comes in the
+    routine's cycle (possibly more than once) is up to the routine's slots (RoutineWorkout)"""
 
     __tablename__ = "workouts"
 
@@ -24,7 +25,6 @@ class Workout(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("routines.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     routine: Mapped[Routine] = relationship(back_populates="workouts")
     # Each entry is a WorkoutExercise: an Exercise plus its position in this workout
@@ -36,16 +36,9 @@ class Workout(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     __table_args__ = (
-        # Deferred to commit so a reorder can swap positions within one transaction.
-        # Its leading routine_id column also serves lookups by routine
-        UniqueConstraint(
-            "routine_id",
-            "position",
-            name="uq_workouts_routine_id_position",
-            deferrable=True,
-            initially="DEFERRED",
-        ),
-        CheckConstraint("position >= 0", name="position_non_negative"),
+        # The target of routine_workouts' composite foreign key, which keeps a routine's slots
+        # pointing at its own workouts. Its leading routine_id also serves lookups by routine
+        UniqueConstraint("routine_id", "id", name="uq_workouts_routine_id_id"),
     )
 
 

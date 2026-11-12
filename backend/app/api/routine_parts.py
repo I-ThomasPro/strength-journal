@@ -1,4 +1,4 @@
-"""Loading a routine's parts (workouts, workout exercises, sets) with its visibility rules
+"""Loading a routine's parts (slots, workouts, workout exercises, sets) by its visibility
 
 - Reading follows the routine: library routines' parts and the user's own
 - Changing needs the user's own routine: pass the routine to `require_owned()`, which gives
@@ -17,8 +17,32 @@ from app.api.visibility import visible_to
 from app.models.exercise import Exercise
 from app.models.ordering import renumber
 from app.models.routine import Routine
+from app.models.routine_workout import RoutineWorkout
 from app.models.set import Set
 from app.models.workout import Workout, WorkoutExercise
+
+
+def get_routine_workout(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> RoutineWorkout:
+    """A slot in a routine the user can see; 404 otherwise"""
+    slot = db.scalar(
+        select(RoutineWorkout)
+        .join(RoutineWorkout.routine)
+        .where(RoutineWorkout.id == id, visible_to(Routine, user_id))
+    )
+    if slot is None:
+        raise not_found()
+    return slot
+
+
+def get_routine_workout_target(db: Session, routine: Routine, workout_id: uuid.UUID) -> Workout:
+    """The routine's own workout with this id, for a slot to point at. 422 otherwise, since
+    it's a reference in the request body rather than the resource being asked for"""
+    workout = db.scalar(
+        select(Workout).where(Workout.id == workout_id, Workout.routine_id == routine.id)
+    )
+    if workout is None:
+        raise invalid("That workout isn't in this routine")
+    return workout
 
 
 def get_workout(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> Workout:

@@ -11,13 +11,15 @@ from app.models.common import TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.user import User
 
 if TYPE_CHECKING:
+    from app.models.routine_workout import RoutineWorkout
     from app.models.workout import Workout
 
 
 class Routine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A routine in the shared library (no owner) or a user's own routine.
 
-    A Routine outlines a set of Workouts to be completed in a configured order.
+    A Routine outlines a set of Workouts, and its slots (RoutineWorkout) set the order they're
+    completed in: its cycle, which can repeat a workout.
     """
 
     __tablename__ = "routines"
@@ -36,10 +38,18 @@ class Routine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # rewrite or delete rows the database already handles
     owner: Mapped[User | None] = relationship()
     source_routine: Mapped[Routine | None] = relationship(remote_side=lambda: [Routine.id])
-    # passive_deletes leaves deleting a routine's workouts to the database's ON DELETE CASCADE
+    # passive_deletes leaves deleting a routine's workouts and slots to the database's
+    # ON DELETE CASCADE. Workouts are listed in the order they were added
     workouts: Mapped[list[Workout]] = relationship(
         back_populates="routine",
-        order_by="Workout.position",
+        order_by="(Workout.created_at, Workout.id)",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    # The cycle: which workout comes at each position
+    slots: Mapped[list[RoutineWorkout]] = relationship(
+        back_populates="routine",
+        order_by="RoutineWorkout.position",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )

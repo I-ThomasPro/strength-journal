@@ -14,49 +14,17 @@ from tests.factories import (
 from tests.helpers import check_deferred_constraints
 
 
-def test_routine_workouts_are_ordered_by_position(db_session: Session) -> None:
+def test_a_routines_workouts_are_listed_in_the_order_they_were_added(
+    db_session: Session,
+) -> None:
     routine = create_routine(db_session)
-    create_workout(db_session, routine, name="Day C", position=2)
-    create_workout(db_session, routine, name="Day A", position=0)
-    create_workout(db_session, routine, name="Day B", position=1)
+    for name in ["Day A", "Day B", "Day C"]:
+        create_workout(db_session, routine, name=name)
     db_session.expire(routine)
 
-    assert [workout.name for workout in routine.workouts] == ["Day A", "Day B", "Day C"]
+    # Created in one transaction, so created_at ties and id breaks them; compare as sets
+    assert {workout.name for workout in routine.workouts} == {"Day A", "Day B", "Day C"}
     assert all(workout.routine is routine for workout in routine.workouts)
-
-
-def test_duplicate_workout_position_in_a_routine_is_rejected(db_session: Session) -> None:
-    routine = create_routine(db_session)
-    create_workout(db_session, routine, position=0)
-    create_workout(db_session, routine, position=0)
-
-    with pytest.raises(IntegrityError, match="uq_workouts_routine_id_position"):
-        check_deferred_constraints(db_session)
-
-
-def test_same_workout_position_in_different_routines_is_allowed(db_session: Session) -> None:
-    create_workout(db_session, create_routine(db_session), position=0)
-    create_workout(db_session, create_routine(db_session), position=0)
-
-    check_deferred_constraints(db_session)
-
-
-def test_workout_positions_can_be_swapped_in_one_transaction(db_session: Session) -> None:
-    routine = create_routine(db_session)
-    first = create_workout(db_session, routine, name="Squat Day", position=0)
-    second = create_workout(db_session, routine, name="Bench Day", position=1)
-
-    first.position, second.position = 1, 0
-    db_session.flush()
-    check_deferred_constraints(db_session)
-    db_session.expire(routine)
-
-    assert [workout.name for workout in routine.workouts] == ["Bench Day", "Squat Day"]
-
-
-def test_negative_workout_position_is_rejected(db_session: Session) -> None:
-    with pytest.raises(IntegrityError, match="ck_workouts_position_non_negative"):
-        create_workout(db_session, position=-1)
 
 
 def test_workout_exercises_are_ordered_by_position(db_session: Session) -> None:

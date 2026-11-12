@@ -1,6 +1,7 @@
 """Copying a routine with all its contents"""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -15,6 +16,7 @@ from app.models.user import User
 from tests.factories import (
     create_exercise,
     create_routine,
+    create_routine_workout,
     create_set,
     create_user,
     create_workout,
@@ -24,15 +26,21 @@ from tests.helpers import assert_error
 
 
 def build_source(db_session: Session, owner: User | None = None) -> Routine:
-    """Two workouts of two exercises with two sets each. Each level is created out of order
-    (later positions first) so copying in creation order would show"""
+    """Two workouts of two exercises with two sets each, in a cycle that repeats one: A, B, A.
+    Workouts are added B first; the other levels are created out of order (later positions
+    first) so copying in creation order would show"""
     routine = create_routine(
         db_session, name="Starting Strength", description="Three days a week", owner=owner
     )
     squat = create_exercise(db_session, name=f"Squat {uuid.uuid4().hex[:6]}")
     press = create_exercise(db_session, name=f"Press {uuid.uuid4().hex[:6]}")
-    for workout_position, name in [(1, "Day B"), (0, "Day A")]:
-        workout = create_workout(db_session, routine, name=name, position=workout_position)
+    added = datetime(2026, 1, 1, tzinfo=UTC)
+    workouts = {}
+    for offset, name in [(1, "Day B"), (0, "Day A")]:
+        workout = create_workout(
+            db_session, routine, name=name, created_at=added + timedelta(days=offset)
+        )
+        workouts[name] = workout
         for entry_position, exercise in [(1, press), (0, squat)]:
             entry = create_workout_exercise(db_session, workout, exercise, position=entry_position)
             for set_position, reps in [(1, 3), (0, 5)]:
@@ -41,9 +49,11 @@ def build_source(db_session: Session, owner: User | None = None) -> Routine:
                     entry,
                     position=set_position,
                     target_reps=reps,
-                    target_weight=Decimal("60") + workout_position * 10 + set_position,
+                    target_weight=Decimal("60") + offset * 10 + set_position,
                     weight_unit=WeightUnit.LB if entry_position else WeightUnit.KG,
                 )
+    for position, name in [(2, "Day A"), (1, "Day B"), (0, "Day A")]:
+        create_routine_workout(db_session, workouts[name], position=position)
     return routine
 
 
@@ -53,7 +63,6 @@ def contents(detail: dict) -> dict:
         "workouts": [
             {
                 "name": workout["name"],
-                "position": workout["position"],
                 "exercises": [
                     {
                         "position": entry["position"],
@@ -76,6 +85,8 @@ def contents(detail: dict) -> dict:
             }
             for workout in detail["workouts"]
         ],
+        # The cycle by workout name, since a copy's workouts have new ids
+        "slots": [(slot["position"], slot["workout"]["name"]) for slot in detail["slots"]],
     }
 
 
@@ -95,6 +106,10 @@ def test_copying_a_library_routine_copies_everything_in_order(
     body = response.json()
     assert contents(body) == contents(original)
     assert [w["name"] for w in body["workouts"]] == ["Day A", "Day B"]
+    assert contents(body)["slots"] == [(0, "Day A"), (1, "Day B"), (2, "Day A")]
+    # The copy's slots point at the copy's own workouts
+    copied_ids = {workout["id"] for workout in body["workouts"]}
+    assert {slot["workout"]["id"] for slot in body["slots"]} == copied_ids
     assert [s["target_reps"] for s in body["workouts"][0]["exercises"][0]["sets"]] == [5, 3]
     # New rows throughout, in a routine the user owns that links back to its source
     assert body["id"] != original["id"]
