@@ -1,7 +1,7 @@
 UV := uv --directory backend
 PNPM := pnpm --dir frontend
 
-.PHONY: help db-up db-down install dev migrate lint format test
+.PHONY: help db-up db-down install dev migrate lint format test openapi
 .PHONY: fe-install fe-dev fe-build fe-lint fe-format fe-test
 
 help: ## Show available targets
@@ -32,6 +32,9 @@ format: ## Fix lint issues and format code
 
 test: ## Run the backend tests
 	$(UV) run pytest
+
+openapi: ## Export the API schema to frontend/openapi.json (after any API change)
+	$(UV) run python -m app.openapi ../frontend/openapi.json
 
 fe-install: ## Install frontend dependencies
 	$(PNPM) install
