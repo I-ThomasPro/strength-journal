@@ -5,11 +5,15 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend.yml"
+      # The API schema the frontend generates its client from, checked below
+      - "frontend/openapi.json"
   push:
     branches: [main]
     paths:
       - "backend/**"
       - ".github/workflows/backend.yml"
+      # The API schema the frontend generates its client from, checked below
+      - "frontend/openapi.json"
 
 concurrency:
   group: backend-${{ github.ref }}
@@ -65,3 +69,6 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+      - name: Check frontend/openapi.json matches the API
+        run: uv run python -m app.openapi --check ../frontend/openapi.json

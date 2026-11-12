@@ -8,17 +8,20 @@
     "node": ">=22.22"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "generate": "orval",
+    "dev": "pnpm generate && vite",
+    "build": "pnpm generate && tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b",
-    "lint": "eslint .",
+    "typecheck": "pnpm generate && tsc -b",
+    "lint": "pnpm generate && eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "pnpm generate && vitest run",
+    "test:watch": "pnpm generate && vitest"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.107.1",
+    "@tanstack/react-query-devtools": "^5.107.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "radix-ui": "^1.8.1",
@@ -45,6 +48,8 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.14.0",
     "jsdom": "^31.0.0",
+    "msw": "^3.0.5",
+    "orval": "^8.47.0",
     "prettier": "^3.10.1",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4.3.5",

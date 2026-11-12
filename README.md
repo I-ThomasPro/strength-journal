@@ -28,9 +28,12 @@ Settings come from environment variables or `backend/.env`. Copy `backend/.env.e
 make test       # pytest against strength_journal_test
 make lint       # ruff lint + format check
 make format     # auto-fix lint issues and format
+make openapi    # export the API schema to frontend/openapi.json
 ```
 
 Tests migrate the test database to the latest revision, then run each test inside a transaction that's rolled back afterwards.
+
+After changing the API (routes, schemas or their docstrings), run `make openapi` and commit `frontend/openapi.json`; the frontend generates its API client from it. CI fails when the file doesn't match the API (`python -m app.openapi --check`).
 
 ### Migrations
 ```bash
@@ -135,6 +138,7 @@ backend/
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── db.py            # Base, engine, get_db / DbSession dependency
 │   ├── cli.py           # admin commands (create-invite)
+│   ├── openapi.py       # exports the OpenAPI schema for the frontend (make openapi)
 │   ├── auth/            # passwords, sessions + CurrentUser, invites, request guards
 │   ├── models/          # one module per table; common.py holds shared mixins and types
 │   ├── schemas/         # Pydantic request/response models; common.py holds pages, forms, errors
@@ -173,6 +177,18 @@ make fe-format  # fix lint issues and format
 make fe-build   # typecheck and build into frontend/dist
 ```
 
+### API client
+The app talks to the API through TanStack Query hooks that [Orval](https://orval.dev/) generates from `frontend/openapi.json` (`orval.config.ts`):
+- **Generated, not committed:** `pnpm generate` writes them to `src/api/generated/`, and `dev`, `build`, `typecheck`, `lint` and `test` run it first. After `make openapi`, restart `make fe-dev` or run `pnpm generate` to pick up API changes
+- **Names:** one module per tag, with hooks named after operation ids: `useExercisesIndex()` from `@/api/generated/exercises` for `exercises-index`, `useSessionCreate()` for `session-create`. Request and response types are in `@/api/generated/model`
+- **Requests:** every request goes through `apiFetch` in `src/api/client.ts`. It sends the session cookie and JSON, and adds the `X-CSRF-Token` header to writes. The token is set with `setCsrfToken()` and read as each request is sent
+- **Errors:** a failed request throws one of two errors:
+  - `ApiError`, with `status`, `code` (e.g. `duplicate_name`) and `detail`. Its `errors` list holds a 422's invalid fields as `{field, message, type}`, with dotted paths like `sets.0.reps`. `isApiError(error, 'not_found')` checks for one code
+  - `NetworkError`, when no response arrived (e.g. offline)
+- **Retries and caching** (`src/api/query-client.ts`): queries retry network errors and 5xx responses up to three times but never a 4xx, and data stays fresh for 30 seconds. The TanStack Query devtools open from the top-right button in development
+- **Weights** stay decimal strings, as the API sends them (`"102.50"`). `formatWeight()` and `parseWeight()` in `src/lib/weight.ts` convert them for display and from input
+- **Tests:** MSW (`src/test/server.ts`) stands in for the API. A test adds the responses it needs with `server.use(...)`, and any request without a handler fails. `renderWithQueryClient()` in `src/test/render.tsx` renders a component with a fresh query client that doesn't retry
+
 ### Conventions
 - **Imports:** `@/` is `frontend/src/`, e.g. `import { Button } from '@/components/ui/button'`
 - **UI components:** shadcn/ui components are copied into `src/components/ui/`, and the project owns and edits them. Add one from `frontend/` with `pnpm dlx shadcn@latest add <component>`. The theme's colors and radius are CSS variables in `src/index.css`
@@ -185,17 +201,20 @@ make fe-build   # typecheck and build into frontend/dist
 ```
 frontend/
 ├── index.html
+├── openapi.json          # the API schema, exported by the backend (make openapi)
+├── orval.config.ts       # generates the API client from openapi.json
 ├── vite.config.ts        # plugins, the @ alias, the /api proxy and Vitest settings
 ├── components.json       # shadcn/ui settings
 ├── public/               # static files served as-is
 └── src/
     ├── main.tsx          # mounts the app
-    ├── app.tsx           # the router
+    ├── app.tsx           # the query client and router
     ├── routes.tsx        # pages by path
     ├── navigation.ts     # the tab bar's tabs
     ├── index.css         # Tailwind and the theme
+    ├── api/              # apiFetch and errors, the query client; generated/ is Orval's output
     ├── components/       # app components; ui/ holds shadcn/ui's
     ├── pages/            # one component per page
-    ├── lib/              # helpers, e.g. cn()
-    └── test/             # test setup
+    ├── lib/              # helpers, e.g. cn() and the weight formatters
+    └── test/             # test setup, the MSW server and render helpers
 ```
