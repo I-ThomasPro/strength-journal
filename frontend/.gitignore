@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+*.local
+*.tsbuildinfo
+
+# The repository root ignores Python's lib/ folders; shadcn/ui keeps its helpers in src/lib
+!lib/

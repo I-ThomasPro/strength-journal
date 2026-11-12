@@ -1,0 +1,5 @@
+peerDependencyRules:
+  allowedVersions:
+    # jsx-a11y's last release (6.10.2) predates ESLint 10 and lists ESLint up to 9, but it uses
+    # none of the APIs ESLint 10 removed. Remove this once a release lists ESLint 10
+    eslint-plugin-jsx-a11y>eslint: '10'
