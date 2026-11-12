@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.models.common import WeightUnit
 from app.models.exercise import Exercise
-from app.models.progression import Progression
 from app.models.routine import Routine
 from app.models.set import Set
 from app.models.set_record import SetRecord
@@ -89,19 +88,6 @@ def create_workout_exercise(
     session.add(workout_exercise)
     session.flush()
     return workout_exercise
-
-
-def create_progression(session: Session, **overrides: object) -> Progression:
-    """+2.5 kg on a new library routine and exercise unless given"""
-    fields: dict[str, object] = {"increment": Decimal("2.5"), "increment_unit": WeightUnit.KG}
-    if "routine" not in overrides and "routine_id" not in overrides:
-        fields["routine"] = create_routine(session)
-    if "exercise" not in overrides and "exercise_id" not in overrides:
-        fields["exercise"] = create_exercise(session)
-    progression = Progression(**(fields | overrides))
-    session.add(progression)
-    session.flush()
-    return progression
 
 
 def create_set(

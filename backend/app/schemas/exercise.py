@@ -23,7 +23,7 @@ class ExerciseUpdate(UpdateModel):
 
 
 class ExerciseSummary(ReadModel):
-    """An exercise as it appears inside a workout or progression"""
+    """An exercise as it appears inside a workout"""
 
     id: uuid.UUID
     name: str

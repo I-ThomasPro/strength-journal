@@ -45,17 +45,9 @@ CONSTRAINT_ERRORS: dict[str, tuple[str, str]] = {
         "duplicate_name",
         "You already have an exercise with this name",
     ),
-    "uq_progressions_routine_id_exercise_id": (
-        "duplicate_progression",
-        "This routine already has a progression for that exercise",
-    ),
     "fk_workout_exercises_exercise_id_exercises": (
         "exercise_in_use",
         "This exercise is used in a workout",
-    ),
-    "fk_progressions_exercise_id_exercises": (
-        "exercise_in_use",
-        "This exercise is used in a progression",
     ),
     "fk_set_records_exercise_id_exercises": (
         "exercise_in_use",

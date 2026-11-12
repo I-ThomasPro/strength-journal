@@ -5,7 +5,6 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, StringConstraints
 
 from app.schemas.common import ReadModel, UpdateModel, omitted
-from app.schemas.progression import ProgressionRead
 from app.schemas.workout import WorkoutDetail
 
 RoutineName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
@@ -55,4 +54,3 @@ class RoutineDetail(RoutineFields):
     """Everything in a routine, each list in position order"""
 
     workouts: list[WorkoutDetail]
-    progressions: list[ProgressionRead]

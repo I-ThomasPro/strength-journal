@@ -9,7 +9,6 @@ from app.api.pagination import PageQuery, paginate
 from app.api.visibility import Scope, get_visible_or_404, in_scope, require_owned, visible_to
 from app.auth.sessions import CurrentUser
 from app.db import DbSession
-from app.models.progression import Progression
 from app.models.routine import Routine
 from app.models.set import Set
 from app.models.workout import Workout, WorkoutExercise
@@ -31,7 +30,6 @@ DETAIL_OPTIONS = (
     selectinload(Routine.workouts)
     .selectinload(Workout.exercises)
     .options(joinedload(WorkoutExercise.exercise), selectinload(WorkoutExercise.sets)),
-    selectinload(Routine.progressions).joinedload(Progression.exercise),
 )
 
 
@@ -79,7 +77,7 @@ def create(body: RoutineCreate, user: CurrentUser, db: DbSession) -> RoutineDeta
 
 @router.get("/{id}")
 def show(id: uuid.UUID, user: CurrentUser, db: DbSession) -> RoutineDetail:
-    """The whole routine: its workouts, their exercises and sets, and its progressions"""
+    """The whole routine: its workouts, their exercises and sets"""
     routine = db.scalar(
         select(Routine)
         .where(Routine.id == id, visible_to(Routine, user.id))
@@ -93,8 +91,8 @@ def show(id: uuid.UUID, user: CurrentUser, db: DbSession) -> RoutineDetail:
 @router.post("/{id}/copy", status_code=status.HTTP_201_CREATED)
 def copy(id: uuid.UUID, body: RoutineCopy, user: CurrentUser, db: DbSession) -> RoutineDetail:
     """Copy a library routine or one of the user's own into a new routine the user owns:
-    its workouts, their exercises and sets, and its progressions, keeping every position.
-    Exercises are referenced, not copied"""
+    its workouts, their exercises and sets, keeping every position. Exercises are
+    referenced, not copied"""
     source = db.scalar(
         select(Routine)
         .where(Routine.id == id, visible_to(Routine, user.id))
@@ -126,16 +124,6 @@ def copy(id: uuid.UUID, body: RoutineCopy, user: CurrentUser, db: DbSession) -> 
                 for set_ in entry.sets
             )
     db.add(routine)
-    db.add_all(
-        Progression(
-            routine=routine,
-            exercise_id=progression.exercise_id,
-            increment=progression.increment,
-            increment_unit=progression.increment_unit,
-            condition=progression.condition,
-        )
-        for progression in source.progressions
-    )
     db.flush()
     # Load the copy afresh, as `show` would
     db.expire_all()
@@ -155,8 +143,8 @@ def update(id: uuid.UUID, body: RoutineUpdate, user: CurrentUser, db: DbSession)
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def destroy(id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
-    """Delete one of the user's routines, with its workouts, sets and progressions. Exercises
-    and recorded sets stay; 403 `read_only` for library routines"""
+    """Delete one of the user's routines, with its workouts and sets. Exercises and recorded
+    sets stay; 403 `read_only` for library routines"""
     routine = get_visible_or_404(db, Routine, id, user.id)
     require_owned(routine, user.id)
     db.delete(routine)

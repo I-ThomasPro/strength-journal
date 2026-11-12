@@ -14,7 +14,6 @@ from app.models.routine import Routine
 from app.models.user import User
 from tests.factories import (
     create_exercise,
-    create_progression,
     create_routine,
     create_set,
     create_user,
@@ -25,8 +24,8 @@ from tests.helpers import assert_error
 
 
 def build_source(db_session: Session, owner: User | None = None) -> Routine:
-    """Two workouts of two exercises with two sets each, plus two progressions. Each level is
-    created out of order (later positions first) so copying in creation order would show"""
+    """Two workouts of two exercises with two sets each. Each level is created out of order
+    (later positions first) so copying in creation order would show"""
     routine = create_routine(
         db_session, name="Starting Strength", description="Three days a week", owner=owner
     )
@@ -45,10 +44,6 @@ def build_source(db_session: Session, owner: User | None = None) -> Routine:
                     target_weight=Decimal("60") + workout_position * 10 + set_position,
                     weight_unit=WeightUnit.LB if entry_position else WeightUnit.KG,
                 )
-    create_progression(db_session, routine=routine, exercise=squat, increment=Decimal("5"))
-    create_progression(
-        db_session, routine=routine, exercise=press, increment=Decimal("2.5"), increment_unit="lb"
-    )
     return routine
 
 
@@ -81,10 +76,6 @@ def contents(detail: dict) -> dict:
             }
             for workout in detail["workouts"]
         ],
-        "progressions": sorted(
-            (p["exercise"]["id"], p["increment"], p["increment_unit"], p["condition"])
-            for p in detail["progressions"]
-        ),
     }
 
 
@@ -105,7 +96,6 @@ def test_copying_a_library_routine_copies_everything_in_order(
     assert contents(body) == contents(original)
     assert [w["name"] for w in body["workouts"]] == ["Day A", "Day B"]
     assert [s["target_reps"] for s in body["workouts"][0]["exercises"][0]["sets"]] == [5, 3]
-    assert len(body["progressions"]) == 2
     # New rows throughout, in a routine the user owns that links back to its source
     assert body["id"] != original["id"]
     assert body["workouts"][0]["id"] != original["workouts"][0]["id"]
@@ -191,7 +181,8 @@ def test_an_empty_routine_can_be_copied(logged_in_client: TestClient, db_session
 
     body = logged_in_client.post(copy_path(source), json={}).json()
 
-    assert (body["name"], body["workouts"], body["progressions"]) == ("Blank", [], [])
+    assert (body["name"], body["workouts"]) == ("Blank", [])
+    assert "progressions" not in body
 
 
 def test_another_users_routine_cant_be_copied(

@@ -10,7 +10,6 @@ from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from app.models.exercise import Exercise
-from app.models.progression import Progression
 from app.models.routine import Routine
 from app.models.set import Set
 from app.models.set_record import SetRecord
@@ -18,7 +17,6 @@ from app.models.user import User
 from app.models.workout import Workout, WorkoutExercise
 from tests.factories import (
     create_exercise,
-    create_progression,
     create_routine,
     create_set,
     create_set_record,
@@ -55,8 +53,7 @@ def counting_queries(db_session: Session) -> Iterator[list[str]]:
 
 
 def build_routine(db_session: Session, owner: User, size: int) -> Routine:
-    """A routine with `size` workouts, each with `size` exercises of `size` sets, and `size`
-    progressions"""
+    """A routine with `size` workouts, each with `size` exercises of `size` sets"""
     routine = create_routine(db_session, owner=owner)
     for _ in range(size):
         workout = create_workout(db_session, routine)
@@ -65,7 +62,6 @@ def build_routine(db_session: Session, owner: User, size: int) -> Routine:
             workout_exercise = create_workout_exercise(db_session, workout, exercise)
             for _ in range(size):
                 create_set(db_session, workout_exercise)
-            create_progression(db_session, routine=routine, exercise=exercise)
     return routine
 
 
@@ -144,7 +140,7 @@ def test_creating_an_empty_routine(
     assert body["name"] == "Upper Lower"
     assert body["description"] == "Four days a week"
     assert body["is_library"] is False
-    assert body["workouts"] == [] and body["progressions"] == []
+    assert body["workouts"] == []
     routine = db_session.get(Routine, uuid.UUID(body["id"]))
     assert routine is not None and routine.owner_id == current_user.id
 
@@ -179,7 +175,6 @@ def test_the_detail_returns_everything_in_position_order(
     create_workout_exercise(db_session, day_b, squat, position=0)
     create_set(db_session, first, position=1, target_reps=3)
     create_set(db_session, first, position=0, target_reps=5)
-    progression = create_progression(db_session, routine=routine, exercise=squat)
     db_session.expire_all()
 
     response = logged_in_client.get(f"/api/routines/{routine.id}")
@@ -194,18 +189,8 @@ def test_the_detail_returns_everything_in_position_order(
     assert [entry["target_reps"] for entry in exercises[0]["sets"]] == [5, 3]
     assert exercises[0]["sets"][0]["target_weight"] == "60.00"
     assert exercises[1]["sets"] == []
-    assert body["progressions"] == [
-        {
-            "id": str(progression.id),
-            "routine_id": str(routine.id),
-            "exercise": {"id": str(squat.id), "name": "Squat", "type": "strength"},
-            "increment": "2.50",
-            "increment_unit": "kg",
-            "condition": "all_sets_completed",
-            "created_at": body["progressions"][0]["created_at"],
-            "updated_at": body["progressions"][0]["updated_at"],
-        }
-    ]
+    # Progressions were removed (#42); the detail no longer has them
+    assert "progressions" not in body
 
 
 def test_the_detail_loads_in_a_fixed_number_of_queries(
@@ -316,7 +301,6 @@ def test_deleting_a_routine_keeps_its_exercises_and_set_records(
     db_session.expire_all()
     assert db_session.get(Routine, routine.id) is None
     assert count(db_session, Workout, routine_id=routine.id) == 0
-    assert count(db_session, Progression, routine_id=routine.id) == 0
     # Only the other routine's workout exercise and set are left
     assert count(db_session, WorkoutExercise) == 1
     assert count(db_session, Set) == 1

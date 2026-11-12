@@ -11,7 +11,6 @@ from app.models.exercise import Exercise
 from app.models.user import User
 from tests.factories import (
     create_exercise,
-    create_progression,
     create_routine,
     create_set_record,
     create_user,
@@ -267,12 +266,9 @@ def test_deleting_an_own_exercise(
         lambda db, user, exercise: create_workout_exercise(
             db, create_workout(db, create_routine(db, owner=user)), exercise
         ),
-        lambda db, user, exercise: create_progression(
-            db, routine=create_routine(db, owner=user), exercise=exercise
-        ),
         lambda db, user, exercise: create_set_record(db, user=user, exercise=exercise),
     ],
-    ids=["workout", "progression", "set_record"],
+    ids=["workout", "set_record"],
 )
 def test_deleting_an_exercise_in_use_is_a_409(
     logged_in_client: TestClient,
