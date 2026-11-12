@@ -9,11 +9,13 @@ from sqlalchemy.orm import Session
 from app.models.common import WeightUnit
 from app.models.exercise import Exercise
 from app.models.routine import Routine
+from app.models.routine_cycle import RoutineCycle
 from app.models.routine_workout import RoutineWorkout
 from app.models.set import Set
 from app.models.set_record import SetRecord
 from app.models.user import User
 from app.models.workout import Workout, WorkoutExercise
+from app.models.workout_session import WorkoutSession
 
 
 def create_user(session: Session, **overrides: object) -> User:
@@ -141,3 +143,46 @@ def create_set_record(session: Session, **overrides: object) -> SetRecord:
     session.add(set_record)
     session.flush()
     return set_record
+
+
+def create_routine_cycle(
+    session: Session, routine: Routine | None = None, **overrides: object
+) -> RoutineCycle:
+    """The next numbered cycle of `routine` (a new library routine if not given), open unless
+    `completed_at` is given"""
+    routine = routine or create_routine(session)
+    last = session.scalar(
+        select(func.max(RoutineCycle.number)).where(RoutineCycle.routine_id == routine.id)
+    )
+    fields: dict[str, object] = {"routine_id": routine.id, "number": (last or 0) + 1}
+    cycle = RoutineCycle(**(fields | overrides))
+    session.add(cycle)
+    session.flush()
+    return cycle
+
+
+def create_workout_session(
+    session: Session,
+    user: User | None = None,
+    routine_workout: RoutineWorkout | None = None,
+    **overrides: object,
+) -> WorkoutSession:
+    """A session by `user` (a new one if not given): freestyle, or from `routine_workout`,
+    with its workout and its routine's open cycle (opened if it has none)"""
+    fields: dict[str, object] = {"user": user or create_user(session)}
+    if routine_workout is not None:
+        cycle = session.scalar(
+            select(RoutineCycle).where(
+                RoutineCycle.routine_id == routine_workout.routine_id,
+                RoutineCycle.completed_at.is_(None),
+            )
+        ) or create_routine_cycle(session, routine_workout.routine)
+        fields |= {
+            "routine_workout": routine_workout,
+            "workout": routine_workout.workout,
+            "cycle": cycle,
+        }
+    workout_session = WorkoutSession(**(fields | overrides))
+    session.add(workout_session)
+    session.flush()
+    return workout_session

@@ -12,6 +12,7 @@ from tests.conftest import ALEMBIC_INI, TEST_DATABASE_URL
 
 BEFORE_SLOTS = "0f652258164a"
 SLOTS = "83e34e0478bc"
+CYCLES = "e85f55a6a584"
 
 
 @pytest.fixture
@@ -85,3 +86,28 @@ def test_each_workout_becomes_a_slot_at_its_old_position_and_back(
         {"r": routine},
     ).all()
     assert [tuple(workout) for workout in workouts] == [("Day A", 0), ("Day B", 1), ("Day C", 2)]
+
+
+def test_every_existing_routine_starts_at_an_open_cycle_one(
+    migration: tuple[Connection, Config],
+) -> None:
+    connection, config = migration
+    command.downgrade(config, SLOTS)
+    routines = [uuid.uuid4(), uuid.uuid4()]
+    connection.execute(
+        text("INSERT INTO routines (id, name) VALUES (:a, 'Library'), (:b, 'Another')"),
+        {"a": routines[0], "b": routines[1]},
+    )
+
+    command.upgrade(config, CYCLES)
+
+    cycles = connection.execute(
+        text(
+            "SELECT routine_id, number, completed_at FROM routine_cycles "
+            "WHERE routine_id IN (:a, :b) ORDER BY routine_id"
+        ),
+        {"a": routines[0], "b": routines[1]},
+    ).all()
+    assert sorted(tuple(cycle) for cycle in cycles) == sorted(
+        (routine, 1, None) for routine in routines
+    )

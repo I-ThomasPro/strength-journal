@@ -5,6 +5,7 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, StringConstraints
 
 from app.schemas.common import ReadModel, UpdateModel, omitted
+from app.schemas.routine_cycle import RoutineCycleRead
 from app.schemas.routine_workout import RoutineWorkoutRead
 from app.schemas.workout import WorkoutDetail
 
@@ -57,3 +58,9 @@ class RoutineDetail(RoutineFields):
 
     workouts: list[WorkoutDetail]
     slots: list[RoutineWorkoutRead]
+    # The open cycle; null only for a routine that has never had one
+    current_cycle: RoutineCycleRead | None = None
+    # The slot to do next in the current cycle: the one after the user's latest completed
+    # session, or the first if none is. Null once the last slot is done (time for the next
+    # cycle), or if the routine has no slots
+    next_slot: RoutineWorkoutRead | None = None
