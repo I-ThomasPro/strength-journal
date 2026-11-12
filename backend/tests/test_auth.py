@@ -181,6 +181,7 @@ def test_showing_the_session_returns_the_user_and_csrf_token(
         "username": current_user.username,
         "display_name": current_user.display_name,
         "weight_unit": "kg",
+        "is_admin": False,
     }
     assert body["csrf_token"] == logged_in_client.headers[CSRF_HEADER]
 

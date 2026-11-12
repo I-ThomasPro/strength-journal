@@ -1,11 +1,11 @@
 UV := uv --directory backend
 PNPM := pnpm --dir frontend
 
-.PHONY: help db-up db-down install dev migrate lint format test openapi
+.PHONY: help db-up db-down install dev migrate create-admin lint format test openapi
 .PHONY: fe-install fe-dev fe-build fe-lint fe-format fe-test
 
 help: ## Show available targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-11s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
 
 db-up: ## Start Postgres in Docker and wait until it's healthy
 	docker compose up -d --wait db
@@ -21,6 +21,9 @@ dev: ## Run the API with auto-reload on http://localhost:8000
 
 migrate: ## Apply database migrations
 	$(UV) run alembic upgrade head
+
+create-admin: ## Create an admin account (asks for its username, name and password)
+	$(UV) run python -m app.cli create-admin
 
 lint: ## Check linting and formatting
 	$(UV) run ruff check .

@@ -49,11 +49,22 @@ class SessionCreate(BaseModel):
     password: GivenPassword
 
 
+class UserCreate(BaseModel):
+    """A new account, created by an admin (or `python -m app.cli create-admin`)"""
+
+    username: Username
+    display_name: DisplayName
+    password: Password
+    weight_unit: WeightUnit = WeightUnit.KG
+    is_admin: bool = False
+
+
 class UserRead(ReadModel):
     id: uuid.UUID
     username: str
     display_name: str
     weight_unit: WeightUnit
+    is_admin: bool
 
 
 class SessionRead(BaseModel):
