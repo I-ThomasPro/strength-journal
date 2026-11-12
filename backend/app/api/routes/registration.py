@@ -18,17 +18,17 @@ router = APIRouter(prefix="/registration", tags=["registration"])
 )
 def create(body: RegistrationCreate, db: DbSession, response: Response) -> SessionRead:
     """Sign up with an invite code; logs the new user in"""
-    # The invite first: without a valid one, nothing else (e.g. whether the email is taken)
+    # The invite first: without a valid one, nothing else (e.g. whether the username is taken)
     # is checked or revealed
     invite = claim_invite(db, body.invite_code)
     user = User(
-        email=body.email,
+        username=body.username,
         password_hash=hash_password(body.password),
         display_name=body.display_name,
         weight_unit=body.weight_unit,
     )
     db.add(user)
-    # A taken email fails here (409 duplicate_email); the rollback leaves the invite unused
+    # A taken username fails here (409 duplicate_username); the rollback leaves the invite unused
     db.flush()
     mark_used(invite, user)
     session, token = start_session(db, user)

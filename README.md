@@ -53,7 +53,7 @@ Models live in `backend/app/models/`, one module per table, and build on `app/mo
 - Ordered children (a Routine's slots, a Workout's exercises, a workout exercise's sets, a session's set records): an integer `position` with `CHECK (position >= 0)` and `UNIQUE (parent_id, position) DEFERRABLE INITIALLY DEFERRED`, so items can be reordered within one transaction. Tests force the check with `check_deferred_constraints()` from `backend/tests/helpers.py`
 - References to an exercise from another table (workout exercises, set records) use `ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED`. An exercise in use can't be deleted, and the check waits until commit so deleting a user can cascade through both their custom exercises and their routines
 
-Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, email=...)`).
+Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, username=...)`).
 
 ### API conventions
 **RESTful routes.** Resources use the Rails actions by default, with shallow nesting: collection actions under the parent when there is one, member actions flat. A resource only defines the actions it needs.
@@ -117,8 +117,9 @@ cd backend
 uv run python -m app.cli create-invite
 ```
 
-- **Sign up:** `POST /api/registration` `{invite_code, email, password, display_name, weight_unit?}`
-- **Log in:** `POST /api/session` `{email, password}`; check who's logged in with `GET /api/session`; log out with `DELETE /api/session`
+- **Usernames:** accounts log in with a username; there are no emails. A new username is 3 to 32 letters, digits, `.`, `_` or `-`, stored lowercased, so logging in ignores case. Accounts from before usernames (#65) kept their email as their username
+- **Sign up:** `POST /api/registration` `{invite_code, username, password, display_name, weight_unit?}` (409 `duplicate_username` if taken)
+- **Log in:** `POST /api/session` `{username, password}`; check who's logged in with `GET /api/session`; log out with `DELETE /api/session`
 - **Profile:** `GET /api/profile`; `PATCH /api/profile` `{display_name?, weight_unit?}`
 - **Password:** `PATCH /api/password` `{current_password, new_password}` (401 `invalid_credentials` if the current one is wrong). It logs out every other device
 - **Devices:** `GET /api/sessions` lists the user's logins (`current` marks this one); `DELETE /api/sessions/{id}` logs one out

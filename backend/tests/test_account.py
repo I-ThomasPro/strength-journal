@@ -41,7 +41,7 @@ def test_showing_the_profile(logged_in_client: TestClient, current_user: User) -
     assert response.status_code == 200
     assert response.json() == {
         "id": str(current_user.id),
-        "email": current_user.email,
+        "username": current_user.username,
         "display_name": current_user.display_name,
         "weight_unit": "kg",
     }
@@ -96,15 +96,15 @@ def test_invalid_profile_changes_are_rejected(
     assert_error(logged_in_client.patch("/api/profile", json=change), 422, "invalid")
 
 
-def test_the_email_cant_be_changed_through_the_profile(
+def test_the_username_cant_be_changed_through_the_profile(
     logged_in_client: TestClient, current_user: User
 ) -> None:
-    email = current_user.email
+    username = current_user.username
 
-    response = logged_in_client.patch("/api/profile", json={"email": "new@example.com"})
+    response = logged_in_client.patch("/api/profile", json={"username": "new-name"})
 
     assert response.status_code == 200
-    assert response.json()["email"] == email
+    assert response.json()["username"] == username
 
 
 def test_the_profile_needs_a_login(client: TestClient) -> None:
@@ -179,8 +179,12 @@ def test_logging_in_with_the_new_password(
     current_user.password_hash = hash_password(NEW_PASSWORD)
     db_session.flush()
 
-    old = client.post("/api/session", json={"email": current_user.email, "password": TEST_PASSWORD})
-    new = client.post("/api/session", json={"email": current_user.email, "password": NEW_PASSWORD})
+    old = client.post(
+        "/api/session", json={"username": current_user.username, "password": TEST_PASSWORD}
+    )
+    new = client.post(
+        "/api/session", json={"username": current_user.username, "password": NEW_PASSWORD}
+    )
 
     assert_error(old, 401, "invalid_credentials")
     assert new.status_code == 201

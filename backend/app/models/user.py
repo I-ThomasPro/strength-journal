@@ -15,7 +15,8 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (weight_unit_check("weight_unit"),)
 
-    email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    # Unique, and stored lowercased so logging in ignores case
+    username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     weight_unit: Mapped[WeightUnit] = mapped_column(
@@ -25,6 +26,6 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default=WeightUnit.KG.value,
     )
 
-    @validates("email")
-    def _lowercase_email(self, _key: str, email: str) -> str:
-        return email.lower()
+    @validates("username")
+    def _lowercase_username(self, _key: str, username: str) -> str:
+        return username.lower()

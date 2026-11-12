@@ -15,6 +15,7 @@ BEFORE_SLOTS = "0f652258164a"
 SLOTS = "83e34e0478bc"
 CYCLES = "e85f55a6a584"
 SET_RECORDS_IN_SESSIONS = "c379d18a8b36"
+USERNAMES = "7f89aabbe5bf"
 
 
 @pytest.fixture
@@ -192,3 +193,37 @@ def test_existing_set_records_are_grouped_into_daily_sessions_and_back(
         (lifter, 3, monday + timedelta(microseconds=1)),
         (lifter, 1, monday + timedelta(days=1)),
     ]
+
+
+def test_each_email_becomes_a_username_and_back(migration: tuple[Connection, Config]) -> None:
+    connection, config = migration
+    command.downgrade(config, SET_RECORDS_IN_SESSIONS)
+    lifter = uuid.uuid4()
+    email = f"{lifter}@example.com"
+    connection.execute(
+        text(
+            "INSERT INTO users (id, email, password_hash, display_name) "
+            "VALUES (:id, :email, 'x', 'Lifter')"
+        ),
+        {"id": lifter, "email": email},
+    )
+
+    command.upgrade(config, USERNAMES)
+
+    username = connection.execute(
+        text("SELECT username FROM users WHERE id = :id"), {"id": lifter}
+    ).scalar_one()
+    assert username == email
+    constraints = connection.execute(
+        text(
+            "SELECT conname FROM pg_constraint WHERE conrelid = 'users'::regclass AND contype = 'u'"
+        )
+    ).scalars()
+    assert list(constraints) == ["uq_users_username"]
+
+    command.downgrade(config, SET_RECORDS_IN_SESSIONS)
+
+    restored = connection.execute(
+        text("SELECT email FROM users WHERE id = :id"), {"id": lifter}
+    ).scalar_one()
+    assert restored == email

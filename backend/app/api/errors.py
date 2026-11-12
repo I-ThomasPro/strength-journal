@@ -40,7 +40,7 @@ def invalid(detail: str) -> ApiError:
 # Database constraints whose violation means something specific to the client.
 # Deferred foreign keys report at commit, so they're matched by name, not by statement.
 CONSTRAINT_ERRORS: dict[str, tuple[str, str]] = {
-    "uq_users_email": ("duplicate_email", "An account with this email already exists"),
+    "uq_users_username": ("duplicate_username", "That username is taken"),
     "uq_exercises_owner_id_lower_name": (
         "duplicate_name",
         "You already have an exercise with this name",
