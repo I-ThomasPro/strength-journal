@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    cycles,
     exercises,
     health,
     password,
@@ -34,3 +35,4 @@ api_router.include_router(sets.router)
 api_router.include_router(set_records.router)
 api_router.include_router(workout_sessions.router)
 api_router.include_router(session_set_records.router)
+api_router.include_router(cycles.router)
