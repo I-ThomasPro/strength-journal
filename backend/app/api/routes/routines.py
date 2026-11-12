@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.api.errors import not_found
 from app.api.pagination import PageQuery, paginate
+from app.api.routine_parts import current_cycle, next_slot, open_cycle
 from app.api.visibility import Scope, get_visible_or_404, in_scope, require_owned, visible_to
 from app.auth.sessions import CurrentUser
 from app.db import DbSession
@@ -23,6 +24,8 @@ from app.schemas.routine import (
     RoutineSummary,
     RoutineUpdate,
 )
+from app.schemas.routine_cycle import RoutineCycleRead
+from app.schemas.routine_workout import RoutineWorkoutRead
 
 # Library routines (no owner) are read-only; users create and change their own, or copy one
 router = APIRouter(prefix="/routines", tags=["routines"])
@@ -36,8 +39,17 @@ DETAIL_OPTIONS = (
 )
 
 
-def detail(routine: Routine) -> RoutineDetail:
-    return RoutineDetail.model_validate(routine)
+def detail(db: DbSession, routine: Routine, user_id: uuid.UUID) -> RoutineDetail:
+    """The routine with everything RoutineDetail shows, including the user's next slot in the
+    current cycle"""
+    cycle = current_cycle(db, routine)
+    slot = next_slot(db, routine, cycle, user_id)
+    return RoutineDetail.model_validate(routine).model_copy(
+        update={
+            "current_cycle": RoutineCycleRead.model_validate(cycle) if cycle else None,
+            "next_slot": RoutineWorkoutRead.model_validate(slot) if slot else None,
+        }
+    )
 
 
 @router.get("")
@@ -71,11 +83,12 @@ def index(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create(body: RoutineCreate, user: CurrentUser, db: DbSession) -> RoutineDetail:
-    """Create an empty routine owned by the user"""
+    """Create an empty routine owned by the user, starting at cycle 1"""
     routine = Routine(name=body.name, description=body.description, owner_id=user.id)
     db.add(routine)
     db.flush()
-    return detail(routine)
+    open_cycle(db, routine)
+    return detail(db, routine, user.id)
 
 
 @router.get("/{id}")
@@ -88,7 +101,7 @@ def show(id: uuid.UUID, user: CurrentUser, db: DbSession) -> RoutineDetail:
     )
     if routine is None:
         raise not_found()
-    return detail(routine)
+    return detail(db, routine, user.id)
 
 
 @router.post("/{id}/copy", status_code=status.HTTP_201_CREATED)
@@ -139,6 +152,7 @@ def copy(id: uuid.UUID, body: RoutineCopy, user: CurrentUser, db: DbSession) -> 
     )
     db.add(routine)
     db.flush()
+    open_cycle(db, routine)
     # Load the copy afresh, as `show` would
     db.expire_all()
     return show(routine.id, user, db)

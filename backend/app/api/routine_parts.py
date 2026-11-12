@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import invalid, not_found
@@ -17,9 +17,57 @@ from app.api.visibility import visible_to
 from app.models.exercise import Exercise
 from app.models.ordering import renumber
 from app.models.routine import Routine
+from app.models.routine_cycle import RoutineCycle
 from app.models.routine_workout import RoutineWorkout
 from app.models.set import Set
 from app.models.workout import Workout, WorkoutExercise
+from app.models.workout_session import WorkoutSession
+
+
+def current_cycle(db: Session, routine: Routine) -> RoutineCycle | None:
+    """The routine's open cycle, if it has one"""
+    return db.scalar(
+        select(RoutineCycle).where(
+            RoutineCycle.routine_id == routine.id, RoutineCycle.completed_at.is_(None)
+        )
+    )
+
+
+def open_cycle(db: Session, routine: Routine) -> RoutineCycle:
+    """The routine's open cycle, opening the next one (1 for a new routine) if it has none"""
+    cycle = current_cycle(db, routine)
+    if cycle is None:
+        last = db.scalar(
+            select(func.max(RoutineCycle.number)).where(RoutineCycle.routine_id == routine.id)
+        )
+        cycle = RoutineCycle(routine_id=routine.id, number=(last or 0) + 1)
+        db.add(cycle)
+        db.flush()
+    return cycle
+
+
+def next_slot(
+    db: Session, routine: Routine, cycle: RoutineCycle | None, user_id: uuid.UUID
+) -> RoutineWorkout | None:
+    """The slot to do next in the cycle: the one after the user's latest completed session
+    (by performed_at), the first if none is completed, or None once the last slot is done"""
+    slots = routine.slots
+    latest = None
+    if cycle is not None:
+        latest = db.scalar(
+            select(RoutineWorkout)
+            .join(WorkoutSession, WorkoutSession.routine_workout_id == RoutineWorkout.id)
+            .where(
+                WorkoutSession.cycle_id == cycle.id,
+                WorkoutSession.user_id == user_id,
+                WorkoutSession.completed.is_(True),
+            )
+            .order_by(WorkoutSession.performed_at.desc(), WorkoutSession.created_at.desc())
+            .limit(1)
+        )
+    if latest is None:
+        return slots[0] if slots else None
+    return next((slot for slot in slots if slot.position > latest.position), None)
 
 
 def get_routine_workout(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> RoutineWorkout:

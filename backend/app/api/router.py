@@ -13,6 +13,7 @@ from app.api.routes import (
     set_records,
     sets,
     workout_exercises,
+    workout_sessions,
     workouts,
 )
 
@@ -30,3 +31,4 @@ api_router.include_router(workouts.router)
 api_router.include_router(workout_exercises.router)
 api_router.include_router(sets.router)
 api_router.include_router(set_records.router)
+api_router.include_router(workout_sessions.router)
