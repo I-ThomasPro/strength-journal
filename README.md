@@ -147,3 +147,55 @@ backend/
 ├── alembic/             # migration environment and versions/
 └── tests/               # factories.py builds model records for tests
 ```
+
+## Frontend
+
+The web app is a React + TypeScript single-page app in `frontend/`, built with Vite, styled with Tailwind CSS and shadcn/ui, and routed with React Router. It's served from the same origin as the API, so in development Vite proxies `/api` to it.
+
+### Prerequisites
+- Node 22.22 or later (`frontend/.nvmrc`)
+- pnpm 10: `corepack enable` installs the version pinned in `frontend/package.json`
+
+### Quick start
+With the API running (`make dev`, above), in another terminal:
+```bash
+make fe-install # install dependencies into frontend/node_modules
+make fe-dev     # run the app on http://localhost:5173
+```
+
+Vite forwards `/api` requests to `http://localhost:8000` (set `API_URL` to use another address), so the browser sees one origin and the session cookie works as in production. The port is fixed at 5173 because the API only accepts writes from its `ALLOWED_ORIGIN`, `http://localhost:5173` by default. For plain-HTTP development, set `COOKIE_SECURE=false` in `backend/.env`, as `.env.example` does.
+
+### Tests and linting
+```bash
+make fe-test    # Vitest + Testing Library
+make fe-lint    # ESLint, Prettier check and typecheck
+make fe-format  # fix lint issues and format
+make fe-build   # typecheck and build into frontend/dist
+```
+
+### Conventions
+- **Imports:** `@/` is `frontend/src/`, e.g. `import { Button } from '@/components/ui/button'`
+- **UI components:** shadcn/ui components are copied into `src/components/ui/`, and the project owns and edits them. Add one from `frontend/` with `pnpm dlx shadcn@latest add <component>`. The theme's colors and radius are CSS variables in `src/index.css`
+- **Classes:** combine conditional Tailwind classes with `cn()` from `@/lib/utils`. Prettier sorts class names
+- **Routes:** `src/routes.tsx`; the bottom bar's tabs are in `src/navigation.ts`
+- **Tests:** next to the code as `*.test.tsx`. Query by role and accessible name, as a user would find things. `src/test/setup.ts` adds the jest-dom matchers (`toBeInTheDocument()` and others)
+- **Linting:** ESLint uses type information (e.g. it flags a promise that's never awaited or handled), React's hooks rules and jsx-a11y's accessibility rules
+
+### Layout
+```
+frontend/
+├── index.html
+├── vite.config.ts        # plugins, the @ alias, the /api proxy and Vitest settings
+├── components.json       # shadcn/ui settings
+├── public/               # static files served as-is
+└── src/
+    ├── main.tsx          # mounts the app
+    ├── app.tsx           # the router
+    ├── routes.tsx        # pages by path
+    ├── navigation.ts     # the tab bar's tabs
+    ├── index.css         # Tailwind and the theme
+    ├── components/       # app components; ui/ holds shadcn/ui's
+    ├── pages/            # one component per page
+    ├── lib/              # helpers, e.g. cn()
+    └── test/             # test setup
+```
