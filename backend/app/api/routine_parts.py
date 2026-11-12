@@ -70,6 +70,14 @@ def next_slot(
     return next((slot for slot in slots if slot.position > latest.position), None)
 
 
+def get_own_session(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> WorkoutSession:
+    """One of the user's workout sessions; 404 otherwise"""
+    session = db.get(WorkoutSession, id)
+    if session is None or session.user_id != user_id:
+        raise not_found()
+    return session
+
+
 def get_routine_workout(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> RoutineWorkout:
     """A slot in a routine the user can see; 404 otherwise"""
     slot = db.scalar(

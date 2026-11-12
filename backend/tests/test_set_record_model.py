@@ -1,8 +1,6 @@
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,57 +15,106 @@ from tests.factories import (
     create_user,
     create_workout,
     create_workout_exercise,
+    create_workout_session,
 )
 from tests.helpers import check_deferred_constraints
 
 
-def test_record_links_a_user_and_an_exercise(db_session: Session) -> None:
-    user = create_user(db_session)
+def test_a_record_belongs_to_a_session_and_an_exercise(db_session: Session) -> None:
+    workout_session = create_workout_session(db_session)
     squat = create_exercise(db_session, name="Squat")
-    record = create_set_record(
-        db_session, user=user, exercise=squat, reps=8, weight=Decimal("102.5"), weight_unit="lb"
-    )
-    db_session.refresh(record)
 
-    assert record.user is user
-    assert record.exercise is squat
-    assert record.reps == 8
-    assert record.weight == Decimal("102.50")
-    assert record.weight_unit is WeightUnit.LB
+    record = create_set_record(db_session, workout_session, exercise=squat)
+    db_session.expire_all()
+
+    assert record.session.id == workout_session.id
+    assert record.exercise.name == "Squat"
+    assert record.performed_at == workout_session.performed_at
+    assert (record.set_id, record.target_reps, record.target_weight) == (None, None, None)
 
 
-def test_performed_at_defaults_to_now(db_session: Session) -> None:
-    before = datetime.now(UTC) - timedelta(minutes=1)
+def test_a_sessions_records_are_ordered_by_position(db_session: Session) -> None:
+    workout_session = create_workout_session(db_session)
+    for reps, position in [(3, 2), (5, 0), (4, 1)]:
+        create_set_record(db_session, workout_session, reps=reps, position=position)
+    check_deferred_constraints(db_session)
+    db_session.expire_all()
+
+    assert [record.reps for record in workout_session.set_records] == [5, 4, 3]
+
+
+def test_record_positions_can_be_swapped_in_one_transaction(db_session: Session) -> None:
+    workout_session = create_workout_session(db_session)
+    first = create_set_record(db_session, workout_session, reps=1)
+    second = create_set_record(db_session, workout_session, reps=2)
+
+    first.position, second.position = 1, 0
+    db_session.flush()
+    check_deferred_constraints(db_session)
+    db_session.expire_all()
+
+    assert [record.reps for record in workout_session.set_records] == [2, 1]
+
+
+def test_duplicate_position_in_a_session_is_rejected(db_session: Session) -> None:
+    workout_session = create_workout_session(db_session)
+    create_set_record(db_session, workout_session, position=0)
+    create_set_record(db_session, workout_session, position=0)
+
+    with pytest.raises(IntegrityError, match="uq_set_records_session_id_position"):
+        check_deferred_constraints(db_session)
+
+
+def test_negative_position_is_rejected(db_session: Session) -> None:
+    with pytest.raises(IntegrityError, match="ck_set_records_position_non_negative"):
+        create_set_record(db_session, position=-1)
+
+
+@pytest.mark.parametrize(
+    "targets",
+    [
+        {"target_reps": 5},
+        {"target_reps": 5, "target_weight": Decimal("60")},
+        {"target_weight": Decimal("60"), "target_unit": WeightUnit.KG},
+    ],
+)
+def test_targets_are_all_set_or_all_null(db_session: Session, targets: dict) -> None:
+    with pytest.raises(IntegrityError, match="ck_set_records_targets_all_or_none"):
+        create_set_record(db_session, **targets)
+
+
+def test_deleting_a_session_deletes_its_records(db_session: Session) -> None:
     record = create_set_record(db_session)
-    db_session.refresh(record)
+    record_id = record.id
 
-    assert record.performed_at.tzinfo is not None
-    assert record.performed_at > before
+    db_session.delete(record.session)
+    db_session.flush()
+    db_session.expunge_all()
+
+    assert db_session.get(SetRecord, record_id) is None
 
 
-def test_a_users_records_of_an_exercise_are_ordered_by_performed_at(db_session: Session) -> None:
-    user = create_user(db_session)
-    squat = create_exercise(db_session)
-    start = datetime(2026, 11, 2, 18, 0, tzinfo=UTC)
-    for days, weight in [(2, "105"), (0, "100"), (1, "102.5")]:
-        create_set_record(
-            db_session,
-            user=user,
-            exercise=squat,
-            weight=Decimal(weight),
-            performed_at=start + timedelta(days=days),
-        )
-    # Another user's and another exercise's records are left out
-    create_set_record(db_session, exercise=squat)
-    create_set_record(db_session, user=user)
+def test_deleting_a_set_keeps_its_records_and_their_targets(db_session: Session) -> None:
+    set_ = create_set(db_session, target_reps=5, target_weight=Decimal("100"))
+    record = create_set_record(
+        db_session,
+        set=set_,
+        target_reps=5,
+        target_weight=Decimal("100"),
+        target_unit=WeightUnit.KG,
+    )
 
-    history = db_session.scalars(
-        select(SetRecord.weight)
-        .where(SetRecord.user_id == user.id, SetRecord.exercise_id == squat.id)
-        .order_by(SetRecord.performed_at)
-    ).all()
+    db_session.delete(set_)
+    db_session.flush()
+    db_session.expire_all()
 
-    assert history == [Decimal("100.00"), Decimal("102.50"), Decimal("105.00")]
+    kept = db_session.get(SetRecord, record.id)
+    assert kept is not None and kept.set_id is None
+    assert (kept.target_reps, kept.target_weight, kept.target_unit) == (
+        5,
+        Decimal("100.00"),
+        WeightUnit.KG,
+    )
 
 
 def test_zero_reps_and_zero_weight_are_allowed(db_session: Session) -> None:

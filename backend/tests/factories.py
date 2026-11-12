@@ -128,15 +128,27 @@ def create_set(
     return set_
 
 
-def create_set_record(session: Session, **overrides: object) -> SetRecord:
-    """5 reps at 60 kg by a new user, of a new library exercise, unless given"""
+def create_set_record(
+    session: Session,
+    workout_session: WorkoutSession | None = None,
+    user: User | None = None,
+    **overrides: object,
+) -> SetRecord:
+    """5 reps at 60 kg of a new library exercise, appended to `workout_session` (else a new
+    freestyle session by `user`, or by a new user)"""
+    workout_session = workout_session or create_workout_session(session, user=user)
+    next_position = session.scalar(
+        select(func.count())
+        .select_from(SetRecord)
+        .where(SetRecord.session_id == workout_session.id)
+    )
     fields: dict[str, object] = {
+        "session": workout_session,
+        "position": next_position,
         "reps": 5,
         "weight": Decimal("60"),
         "weight_unit": WeightUnit.KG,
     }
-    if "user" not in overrides and "user_id" not in overrides:
-        fields["user"] = create_user(session)
     if "exercise" not in overrides and "exercise_id" not in overrides:
         fields["exercise"] = create_exercise(session)
     set_record = SetRecord(**(fields | overrides))

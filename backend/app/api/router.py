@@ -9,6 +9,7 @@ from app.api.routes import (
     routine_workouts,
     routines,
     session,
+    session_set_records,
     sessions,
     set_records,
     sets,
@@ -32,3 +33,4 @@ api_router.include_router(workout_exercises.router)
 api_router.include_router(sets.router)
 api_router.include_router(set_records.router)
 api_router.include_router(workout_sessions.router)
+api_router.include_router(session_set_records.router)

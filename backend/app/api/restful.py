@@ -67,6 +67,7 @@ CUSTOM_ROUTES: dict[tuple[str, str], str] = {
         "after a dropped connection"
     ),
     ("PUT", "/api/workouts/{workout_id}/workout-exercises/order"): REORDER,
+    ("PUT", "/api/workout-sessions/{workout_session_id}/set-records/order"): REORDER,
     ("PUT", "/api/workout-sessions/{id}"): (
         "Idempotent create-or-change with a client-generated id, so a session can be created "
         "offline and the request retried safely"

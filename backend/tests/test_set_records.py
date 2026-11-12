@@ -1,4 +1,5 @@
-"""Logging lifts with PUT and a client-generated id, and reading an exercise's history"""
+"""Logging sets into workout sessions with PUT, and reading them back by session and by
+exercise"""
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -9,12 +10,23 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.auth.sessions import now
 from app.models.common import WeightUnit
 from app.models.exercise import Exercise
+from app.models.set import Set
 from app.models.set_record import SetRecord
 from app.models.user import User
-from tests.factories import create_exercise, create_set_record, create_user
+from app.models.workout_session import WorkoutSession
+from tests.factories import (
+    create_exercise,
+    create_routine,
+    create_routine_workout,
+    create_set,
+    create_set_record,
+    create_user,
+    create_workout,
+    create_workout_exercise,
+    create_workout_session,
+)
 from tests.helpers import assert_error
 
 DAY = datetime(2026, 11, 2, 18, 0, tzinfo=UTC)
@@ -25,106 +37,190 @@ def squat(db_session: Session) -> Exercise:
     return create_exercise(db_session, name="Squat")
 
 
-def record_body(exercise: Exercise, **overrides: object) -> dict:
-    return {"exercise_id": str(exercise.id), "reps": 5, "weight": "100"} | overrides
+@pytest.fixture
+def freestyle(db_session: Session, current_user: User) -> WorkoutSession:
+    return create_workout_session(db_session, user=current_user, performed_at=DAY)
 
 
-def record_count(db_session: Session, **filters: object) -> int:
+@pytest.fixture
+def planned(
+    db_session: Session, current_user: User, squat: Exercise
+) -> tuple[WorkoutSession, list[Set]]:
+    """A session done from a slot whose workout prescribes two squat sets"""
+    routine = create_routine(db_session, owner=current_user)
+    workout = create_workout(db_session, routine)
+    entry = create_workout_exercise(db_session, workout, squat)
+    sets = [
+        create_set(db_session, entry, target_reps=5, target_weight=Decimal("100")),
+        create_set(db_session, entry, target_reps=3, target_weight=Decimal("110")),
+    ]
+    slot = create_routine_workout(db_session, workout)
+    session = create_workout_session(db_session, user=current_user, routine_workout=slot)
+    return session, sets
+
+
+def record_body(session: WorkoutSession, exercise: Exercise, **overrides: object) -> dict:
+    fields = {
+        "session_id": str(session.id),
+        "exercise_id": str(exercise.id),
+        "reps": 5,
+        "weight": "100",
+    }
+    return fields | overrides
+
+
+def put_record(
+    client: TestClient, session: WorkoutSession, exercise: Exercise, **overrides: object
+) -> dict:
+    response = client.put(
+        f"/api/set-records/{uuid.uuid4()}", json=record_body(session, exercise, **overrides)
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def stored(db_session: Session, session: WorkoutSession) -> list[tuple[int, int]]:
+    """(reps, position) of the session's records, as stored"""
     db_session.expire_all()
-    statement = select(func.count()).select_from(SetRecord).filter_by(**filters)
-    return db_session.scalar(statement) or 0
+    statement = (
+        select(SetRecord.reps, SetRecord.position)
+        .where(SetRecord.session_id == session.id)
+        .order_by(SetRecord.position)
+    )
+    return [tuple(row) for row in db_session.execute(statement)]
+
+
+def numbered(*reps: int) -> list[tuple[int, int]]:
+    return [(count, position) for position, count in enumerate(reps)]
 
 
 def history_path(exercise: Exercise) -> str:
     return f"/api/exercises/{exercise.id}/set-records"
 
 
+def session_records_path(session: WorkoutSession) -> str:
+    return f"/api/workout-sessions/{session.id}/set-records"
+
+
 # Logging with PUT
 
 
 def test_put_creates_then_replaces_a_record(
-    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
+    logged_in_client: TestClient, db_session: Session, freestyle: WorkoutSession, squat: Exercise
 ) -> None:
     path = f"/api/set-records/{uuid.uuid4()}"
-    body = record_body(squat, performed_at=DAY.isoformat())
+    body = record_body(freestyle, squat)
 
     created = logged_in_client.put(path, json=body)
     replaced = logged_in_client.put(path, json=body | {"reps": 4, "weight": 102.5})
+    retried = logged_in_client.put(path, json=body | {"reps": 4, "weight": 102.5})
 
-    assert created.status_code == 201, created.text
-    assert replaced.status_code == 200, replaced.text
-    assert replaced.json()["id"] == created.json()["id"]
+    assert [r.status_code for r in (created, replaced, retried)] == [201, 200, 200]
     assert (replaced.json()["reps"], replaced.json()["weight"]) == (4, "102.50")
-    assert record_count(db_session, user_id=current_user.id) == 1
+    assert replaced.json()["id"] == created.json()["id"]
+    assert stored(db_session, freestyle) == numbered(4)
 
 
-def test_repeating_the_same_put_leaves_one_record(
-    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
-) -> None:
-    path = f"/api/set-records/{uuid.uuid4()}"
-
-    responses = [logged_in_client.put(path, json=record_body(squat)) for _ in range(3)]
-
-    assert [response.status_code for response in responses] == [201, 200, 200]
-    assert len({response.json()["performed_at"] for response in responses}) == 1
-    assert record_count(db_session, user_id=current_user.id) == 1
-
-
-def test_put_defaults_to_the_preferred_unit_and_now(
-    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
+def test_a_record_takes_its_owner_and_time_from_the_session(
+    logged_in_client: TestClient,
+    db_session: Session,
+    current_user: User,
+    freestyle: WorkoutSession,
+    squat: Exercise,
 ) -> None:
     current_user.weight_unit = WeightUnit.LB
     db_session.flush()
-    started = now()
 
-    body = logged_in_client.put(f"/api/set-records/{uuid.uuid4()}", json=record_body(squat)).json()
+    body = put_record(logged_in_client, freestyle, squat)
 
+    assert body["session_id"] == str(freestyle.id)
+    assert datetime.fromisoformat(body["performed_at"]) == DAY
     assert body["weight_unit"] == "lb"
-    assert body["exercise_id"] == str(squat.id)
-    performed_at = datetime.fromisoformat(body["performed_at"])
-    assert started - timedelta(seconds=5) <= performed_at <= now() + timedelta(seconds=5)
+    assert (body["set_id"], body["target_reps"], body["target_unit"]) == (None, None, None)
 
 
-def test_replacing_can_move_the_record_in_time(
-    logged_in_client: TestClient, squat: Exercise
+def test_records_append_insert_and_keep_their_place(
+    logged_in_client: TestClient, db_session: Session, freestyle: WorkoutSession, squat: Exercise
 ) -> None:
-    path = f"/api/set-records/{uuid.uuid4()}"
-    logged_in_client.put(path, json=record_body(squat, performed_at=DAY.isoformat()))
-    later = DAY + timedelta(hours=1)
+    first = put_record(logged_in_client, freestyle, squat, reps=1)
+    put_record(logged_in_client, freestyle, squat, reps=2)
+    put_record(logged_in_client, freestyle, squat, reps=9, position=0)
+    assert stored(db_session, freestyle) == numbered(9, 1, 2)
 
-    body = logged_in_client.put(path, json=record_body(squat, performed_at=later.isoformat()))
+    # Replacing without a position keeps the record where it is
+    logged_in_client.put(
+        f"/api/set-records/{first['id']}", json=record_body(freestyle, squat, reps=8)
+    )
+    assert stored(db_session, freestyle) == numbered(9, 8, 2)
 
-    assert datetime.fromisoformat(body.json()["performed_at"]) == later
+    # With one, it moves
+    logged_in_client.put(
+        f"/api/set-records/{first['id']}", json=record_body(freestyle, squat, reps=8, position=2)
+    )
+    assert stored(db_session, freestyle) == numbered(9, 2, 8)
+
+
+def test_a_record_can_move_to_another_session(
+    logged_in_client: TestClient,
+    db_session: Session,
+    current_user: User,
+    freestyle: WorkoutSession,
+    squat: Exercise,
+) -> None:
+    other = create_workout_session(db_session, user=current_user)
+    put_record(logged_in_client, freestyle, squat, reps=1)
+    moving = put_record(logged_in_client, freestyle, squat, reps=2)
+    put_record(logged_in_client, freestyle, squat, reps=3)
+
+    response = logged_in_client.put(
+        f"/api/set-records/{moving['id']}", json=record_body(other, squat, reps=2)
+    )
+
+    assert response.status_code == 200, response.text
+    assert stored(db_session, freestyle) == numbered(1, 3)
+    assert stored(db_session, other) == numbered(2)
 
 
 def test_another_users_record_id_is_a_409(
-    logged_in_client: TestClient, db_session: Session, squat: Exercise
+    logged_in_client: TestClient, db_session: Session, freestyle: WorkoutSession, squat: Exercise
 ) -> None:
     theirs = create_set_record(db_session, user=create_user(db_session), exercise=squat, reps=8)
 
-    response = logged_in_client.put(f"/api/set-records/{theirs.id}", json=record_body(squat))
+    response = logged_in_client.put(
+        f"/api/set-records/{theirs.id}", json=record_body(freestyle, squat)
+    )
 
     assert_error(response, 409, "id_conflict")
     db_session.expire_all()
     assert db_session.get(SetRecord, theirs.id).reps == 8
 
 
+def test_another_users_or_an_unknown_session_is_not_found(
+    logged_in_client: TestClient, db_session: Session, squat: Exercise
+) -> None:
+    theirs = create_workout_session(db_session, user=create_user(db_session))
+    unknown = WorkoutSession(id=uuid.uuid4())
+
+    for session in [theirs, unknown]:
+        response = logged_in_client.put(
+            f"/api/set-records/{uuid.uuid4()}", json=record_body(session, squat)
+        )
+        assert_error(response, 404, "not_found")
+    assert stored(db_session, theirs) == []
+
+
 def test_only_visible_exercises_can_be_logged(
-    logged_in_client: TestClient, db_session: Session, current_user: User
+    logged_in_client: TestClient, db_session: Session, freestyle: WorkoutSession
 ) -> None:
     theirs = create_exercise(db_session, owner=create_user(db_session))
-    own = create_exercise(db_session, owner=current_user)
 
     for exercise_id in [theirs.id, uuid.uuid4()]:
         response = logged_in_client.put(
             f"/api/set-records/{uuid.uuid4()}",
-            json={"exercise_id": str(exercise_id), "reps": 5, "weight": "100"},
+            json=record_body(freestyle, theirs, exercise_id=str(exercise_id)),
         )
         assert_error(response, 422, "invalid")
-    own_response = logged_in_client.put(f"/api/set-records/{uuid.uuid4()}", json=record_body(own))
-
-    assert own_response.status_code == 201
-    assert record_count(db_session, user_id=current_user.id) == 1
+    assert stored(db_session, freestyle) == []
 
 
 @pytest.mark.parametrize(
@@ -132,149 +228,249 @@ def test_only_visible_exercises_can_be_logged(
     [
         {"reps": -1},
         {"reps": 1001},
+        {"reps": None},
         {"weight": "-0.5"},
         {"weight": "100.125"},
         {"weight": "10000"},
         {"weight_unit": "stone"},
-        {"performed_at": "2026-11-02T18:00:00"},
-        {"reps": None},
+        {"position": -1},
+        {"session_id": None},
     ],
 )
 def test_invalid_records_are_rejected(
-    logged_in_client: TestClient, db_session: Session, squat: Exercise, change: dict
+    logged_in_client: TestClient,
+    db_session: Session,
+    freestyle: WorkoutSession,
+    squat: Exercise,
+    change: dict,
 ) -> None:
     response = logged_in_client.put(
-        f"/api/set-records/{uuid.uuid4()}", json=record_body(squat) | change
+        f"/api/set-records/{uuid.uuid4()}", json=record_body(freestyle, squat) | change
     )
 
     assert_error(response, 422, "invalid")
-    assert record_count(db_session) == 0
+    assert stored(db_session, freestyle) == []
 
 
 def test_a_failed_attempt_with_zero_reps_can_be_logged(
-    logged_in_client: TestClient, squat: Exercise
+    logged_in_client: TestClient, freestyle: WorkoutSession, squat: Exercise
 ) -> None:
-    response = logged_in_client.put(
-        f"/api/set-records/{uuid.uuid4()}", json=record_body(squat, reps=0)
-    )
-
-    assert response.status_code == 201, response.text
-    assert response.json()["reps"] == 0
+    assert put_record(logged_in_client, freestyle, squat, reps=0)["reps"] == 0
 
 
-# Show and delete
+# Linking records to prescribed sets
 
 
-def test_showing_and_deleting_own_records(
-    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
+def test_linking_a_set_copies_its_targets_once(
+    logged_in_client: TestClient,
+    db_session: Session,
+    planned: tuple[WorkoutSession, list[Set]],
+    squat: Exercise,
 ) -> None:
-    record = create_set_record(db_session, user=current_user, exercise=squat)
-    path = f"/api/set-records/{record.id}"
-    # As a real request would, read the stored NUMERIC(6, 2) value rather than the factory's
+    session, (first, _) = planned
+    path = f"/api/set-records/{uuid.uuid4()}"
+    body = record_body(session, squat, set_id=str(first.id), reps=5, weight="100")
+    # As a real request would, read the stored NUMERIC(6, 2) targets, not the factory's
     db_session.expire_all()
 
-    shown = logged_in_client.get(path)
-    deleted = logged_in_client.delete(path)
+    linked = logged_in_client.put(path, json=body).json()
+    first.target_weight = Decimal("105")
+    db_session.flush()
+    retried = logged_in_client.put(path, json=body).json()
 
-    assert shown.status_code == 200
-    assert shown.json()["weight"] == "60.00"
-    assert deleted.status_code == 204
-    assert_error(logged_in_client.get(path), 404, "not_found")
+    for record in [linked, retried]:
+        assert record["set_id"] == str(first.id)
+        assert (record["target_reps"], record["target_weight"], record["target_unit"]) == (
+            5,
+            "100.00",
+            "kg",
+        )
 
 
-def test_another_users_record_is_not_found(
-    logged_in_client: TestClient, db_session: Session, squat: Exercise
+def test_unlinking_clears_the_targets(
+    logged_in_client: TestClient,
+    planned: tuple[WorkoutSession, list[Set]],
+    squat: Exercise,
 ) -> None:
-    theirs = create_set_record(db_session, user=create_user(db_session), exercise=squat)
+    session, (first, _) = planned
+    path = f"/api/set-records/{uuid.uuid4()}"
+    logged_in_client.put(path, json=record_body(session, squat, set_id=str(first.id)))
+
+    body = logged_in_client.put(path, json=record_body(session, squat, set_id=None)).json()
+
+    assert (body["set_id"], body["target_reps"], body["target_weight"]) == (None, None, None)
+
+
+def test_a_session_holds_more_or_fewer_records_than_prescribed(
+    logged_in_client: TestClient,
+    db_session: Session,
+    planned: tuple[WorkoutSession, list[Set]],
+    squat: Exercise,
+) -> None:
+    session, (first, second) = planned
+    put_record(logged_in_client, session, squat, set_id=str(first.id), reps=5)
+    put_record(logged_in_client, session, squat, set_id=str(second.id), reps=3)
+    put_record(logged_in_client, session, squat, reps=8, weight="80")
+
+    assert stored(db_session, session) == numbered(5, 3, 8)
+
+
+def test_a_set_from_another_workout_is_rejected(
+    logged_in_client: TestClient,
+    db_session: Session,
+    planned: tuple[WorkoutSession, list[Set]],
+    freestyle: WorkoutSession,
+    squat: Exercise,
+) -> None:
+    session, (first, _) = planned
+    elsewhere = create_set(db_session)
+
+    for target, set_ in [(session, elsewhere), (freestyle, first)]:
+        response = logged_in_client.put(
+            f"/api/set-records/{uuid.uuid4()}",
+            json=record_body(target, squat, set_id=str(set_.id)),
+        )
+        assert_error(response, 422, "invalid")
+    assert stored(db_session, session) == []
+
+
+# A session's records
+
+
+def test_listing_a_sessions_records_in_order(
+    logged_in_client: TestClient, freestyle: WorkoutSession, squat: Exercise
+) -> None:
+    for reps in [5, 3, 1]:
+        put_record(logged_in_client, freestyle, squat, reps=reps)
+
+    body = logged_in_client.get(session_records_path(freestyle)).json()
+
+    assert [(item["reps"], item["position"]) for item in body["items"]] == numbered(5, 3, 1)
+    assert body["total"] == 3
+
+
+def test_reordering_a_sessions_records(
+    logged_in_client: TestClient, db_session: Session, freestyle: WorkoutSession, squat: Exercise
+) -> None:
+    a, b, c = [put_record(logged_in_client, freestyle, squat, reps=reps) for reps in (1, 2, 3)]
+
+    response = logged_in_client.put(
+        f"{session_records_path(freestyle)}/order",
+        json={"set_record_ids": [c["id"], a["id"], b["id"]]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["reps"] for item in response.json()] == [3, 1, 2]
+    assert stored(db_session, freestyle) == numbered(3, 1, 2)
+
+
+def test_a_reorder_must_list_each_record_exactly_once(
+    logged_in_client: TestClient, db_session: Session, freestyle: WorkoutSession, squat: Exercise
+) -> None:
+    a, b = [put_record(logged_in_client, freestyle, squat, reps=reps) for reps in (1, 2)]
+    elsewhere = create_set_record(db_session)
+
+    for ids in [[a["id"]], [a["id"], b["id"], str(elsewhere.id)], [b["id"], b["id"]], []]:
+        response = logged_in_client.put(
+            f"{session_records_path(freestyle)}/order", json={"set_record_ids": ids}
+        )
+        assert_error(response, 422, "invalid")
+    assert stored(db_session, freestyle) == numbered(1, 2)
+
+
+def test_deleting_a_record_closes_the_gap(
+    logged_in_client: TestClient, db_session: Session, freestyle: WorkoutSession, squat: Exercise
+) -> None:
+    _, middle, _ = [put_record(logged_in_client, freestyle, squat, reps=reps) for reps in (1, 2, 3)]
+
+    response = logged_in_client.delete(f"/api/set-records/{middle['id']}")
+
+    assert response.status_code == 204, response.text
+    assert stored(db_session, freestyle) == numbered(1, 3)
+
+
+def test_another_users_records_are_not_found(
+    logged_in_client: TestClient, db_session: Session
+) -> None:
+    theirs = create_set_record(db_session, user=create_user(db_session))
     path = f"/api/set-records/{theirs.id}"
 
     assert_error(logged_in_client.get(path), 404, "not_found")
     assert_error(logged_in_client.delete(path), 404, "not_found")
-    assert record_count(db_session, id=theirs.id) == 1
+    assert_error(logged_in_client.get(session_records_path(theirs.session)), 404, "not_found")
+    assert_error(
+        logged_in_client.put(
+            f"{session_records_path(theirs.session)}/order",
+            json={"set_record_ids": [str(theirs.id)]},
+        ),
+        404,
+        "not_found",
+    )
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(SetRecord)) == 1
 
 
-# History
+# An exercise's history
 
 
-@pytest.fixture
-def week(db_session: Session, current_user: User, squat: Exercise) -> list[SetRecord]:
-    """One squat record a day for a week, oldest first, plus records that aren't in this
-    user's squat history"""
-    records = [
-        create_set_record(
-            db_session,
-            user=current_user,
-            exercise=squat,
-            reps=day + 1,
-            performed_at=DAY + timedelta(days=day),
-        )
-        for day in range(7)
-    ]
-    create_set_record(db_session, user=create_user(db_session), exercise=squat, performed_at=DAY)
-    create_set_record(db_session, user=current_user, performed_at=DAY)
-    return records
+def make_sessions(
+    db_session: Session, user: User, exercise: Exercise, *reps_by_day: list[int]
+) -> list[WorkoutSession]:
+    """One session a day from DAY, each with records of `exercise` for the given reps"""
+    sessions = []
+    for day, reps in enumerate(reps_by_day):
+        session = create_workout_session(db_session, user=user, performed_at=DAY + timedelta(day))
+        for count in reps:
+            create_set_record(db_session, session, exercise=exercise, reps=count)
+        sessions.append(session)
+    return sessions
 
 
 def reps(body: dict) -> list[int]:
     return [item["reps"] for item in body["items"]]
 
 
-@pytest.mark.usefixtures("week")
-def test_history_is_newest_first_and_only_the_users_own(
-    logged_in_client: TestClient, squat: Exercise
+def test_history_is_newest_session_first_then_in_order(
+    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
 ) -> None:
+    make_sessions(db_session, current_user, squat, [5, 4], [3, 2], [1])
+    create_set_record(db_session, user=create_user(db_session), exercise=squat, reps=99)
+    create_set_record(db_session, user=current_user, reps=98)
+
     body = logged_in_client.get(history_path(squat)).json()
 
-    assert reps(body) == [7, 6, 5, 4, 3, 2, 1]
-    assert body["total"] == 7
+    assert reps(body) == [1, 3, 2, 5, 4]
+    assert body["total"] == 5
+    assert datetime.fromisoformat(body["items"][0]["performed_at"]) == DAY + timedelta(2)
 
 
-@pytest.mark.usefixtures("week")
-def test_history_is_filtered_by_date_range(logged_in_client: TestClient, squat: Exercise) -> None:
-    params = {
-        "since": (DAY + timedelta(days=2)).isoformat(),
-        "until": (DAY + timedelta(days=5)).isoformat(),
-    }
+def test_history_is_filtered_by_session_time(
+    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
+) -> None:
+    make_sessions(db_session, current_user, squat, [1], [2], [3], [4])
+    params = {"since": (DAY + timedelta(1)).isoformat(), "until": (DAY + timedelta(3)).isoformat()}
 
     body = logged_in_client.get(history_path(squat), params=params).json()
 
     # since is inclusive, until is not
-    assert reps(body) == [5, 4, 3]
-    assert body["total"] == 3
+    assert reps(body) == [3, 2]
+    assert body["total"] == 2
 
 
-@pytest.mark.usefixtures("week")
-def test_history_pages_backwards_with_before(logged_in_client: TestClient, squat: Exercise) -> None:
+def test_history_pages_back_without_splitting_a_session(
+    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
+) -> None:
+    make_sessions(db_session, current_user, squat, [1], [2, 3, 4], [5])
     pages = []
-    params: dict[str, object] = {"limit": 3}
+    params: dict[str, object] = {"limit": 2}
     while True:
         body = logged_in_client.get(history_path(squat), params=params).json()
         if not body["items"]:
             break
         pages.append(reps(body))
-        params = {"limit": 3, "before": body["items"][-1]["performed_at"]}
+        params = {"limit": 2, "before": body["items"][-1]["performed_at"]}
 
-    assert pages == [[7, 6, 5], [4, 3, 2], [1]]
-
-
-def test_a_page_never_splits_records_logged_at_the_same_time(
-    logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
-) -> None:
-    for count in [1, 2, 3, 4]:
-        create_set_record(
-            db_session, user=current_user, exercise=squat, reps=count, performed_at=DAY
-        )
-    create_set_record(
-        db_session, user=current_user, exercise=squat, reps=9, performed_at=DAY - timedelta(days=1)
-    )
-
-    first = logged_in_client.get(history_path(squat), params={"limit": 2}).json()
-    second = logged_in_client.get(
-        history_path(squat), params={"limit": 2, "before": first["items"][-1]["performed_at"]}
-    ).json()
-
-    assert sorted(reps(first)) == [1, 2, 3, 4]
-    assert reps(second) == [9]
+    assert pages == [[5, 2, 3, 4], [1]]
 
 
 def test_history_of_an_invisible_exercise_is_not_found(
@@ -286,7 +482,7 @@ def test_history_of_an_invisible_exercise_is_not_found(
     assert_error(logged_in_client.get(f"{history_path(theirs)}/new"), 404, "not_found")
 
 
-def test_history_dates_need_a_timezone(logged_in_client: TestClient, squat: Exercise) -> None:
+def test_history_times_need_a_timezone(logged_in_client: TestClient, squat: Exercise) -> None:
     response = logged_in_client.get(history_path(squat), params={"since": "2026-11-02T18:00:00"})
 
     assert_error(response, 422, "invalid")
@@ -298,29 +494,16 @@ def test_history_dates_need_a_timezone(logged_in_client: TestClient, squat: Exer
 def test_new_suggests_the_latest_record(
     logged_in_client: TestClient, db_session: Session, current_user: User, squat: Exercise
 ) -> None:
+    older, newer = make_sessions(db_session, current_user, squat, [5], [3])
     create_set_record(
-        db_session,
-        user=current_user,
-        exercise=squat,
-        reps=5,
-        weight=Decimal("100"),
-        performed_at=DAY + timedelta(days=1),
-    )
-    create_set_record(
-        db_session,
-        user=current_user,
-        exercise=squat,
-        reps=3,
-        weight=Decimal("110"),
-        weight_unit=WeightUnit.LB,
-        performed_at=DAY,
+        db_session, newer, exercise=squat, reps=2, weight=Decimal("110"), weight_unit="lb"
     )
 
     response = logged_in_client.get(f"{history_path(squat)}/new")
 
     assert response.status_code == 200, response.text
     assert response.json() == {
-        "defaults": {"reps": 5, "weight": "100.00", "weight_unit": "kg"},
+        "defaults": {"reps": 2, "weight": "110.00", "weight_unit": "lb"},
         "options": {"weight_unit": ["kg", "lb"]},
     }
 
@@ -330,17 +513,37 @@ def test_new_without_history_offers_the_preferred_unit(
 ) -> None:
     current_user.weight_unit = WeightUnit.LB
     db_session.flush()
-    create_set_record(db_session, user=create_user(db_session), exercise=squat)
 
     defaults = logged_in_client.get(f"{history_path(squat)}/new").json()["defaults"]
 
     assert defaults == {"reps": None, "weight": None, "weight_unit": "lb"}
 
 
-def test_set_records_need_a_login(client: TestClient, squat: Exercise) -> None:
+def test_new_for_a_prescribed_set_offers_its_targets(
+    logged_in_client: TestClient,
+    db_session: Session,
+    planned: tuple[WorkoutSession, list[Set]],
+    squat: Exercise,
+) -> None:
+    _, (_, second) = planned
+    other_exercise_set = create_set(db_session)
+    db_session.expire_all()
+
+    response = logged_in_client.get(f"{history_path(squat)}/new", params={"set_id": second.id})
+    mismatched = logged_in_client.get(
+        f"{history_path(squat)}/new", params={"set_id": other_exercise_set.id}
+    )
+
+    assert response.json()["defaults"] == {"reps": 3, "weight": "110.00", "weight_unit": "kg"}
+    assert_error(mismatched, 422, "invalid")
+
+
+def test_set_records_need_a_login(
+    client: TestClient, freestyle: WorkoutSession, squat: Exercise
+) -> None:
     assert_error(client.get(history_path(squat)), 401, "not_authenticated")
     assert_error(
-        client.put(f"/api/set-records/{uuid.uuid4()}", json=record_body(squat)),
+        client.put(f"/api/set-records/{uuid.uuid4()}", json=record_body(freestyle, squat)),
         401,
         "not_authenticated",
     )
