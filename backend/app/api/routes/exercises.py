@@ -65,8 +65,8 @@ def update(id: uuid.UUID, body: ExerciseUpdate, user: CurrentUser, db: DbSession
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def destroy(id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
-    """Delete one of the user's exercises. 409 `exercise_in_use` if a workout, progression or
-    set record uses it; 403 `read_only` for library exercises"""
+    """Delete one of the user's exercises. 409 `exercise_in_use` if a workout or set record
+    uses it; 403 `read_only` for library exercises"""
     exercise = get_visible_or_404(db, Exercise, id, user.id)
     require_owned(exercise, user.id)
     db.delete(exercise)

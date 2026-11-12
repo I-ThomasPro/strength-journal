@@ -7,7 +7,6 @@ resolves once every module is loaded. Add new model modules here.
 from app.models import (  # noqa: F401
     exercise,
     invite,
-    progression,
     routine,
     set,
     set_record,
