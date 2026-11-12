@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from alembic import command
@@ -13,6 +14,7 @@ from tests.conftest import ALEMBIC_INI, TEST_DATABASE_URL
 BEFORE_SLOTS = "0f652258164a"
 SLOTS = "83e34e0478bc"
 CYCLES = "e85f55a6a584"
+SET_RECORDS_IN_SESSIONS = "c379d18a8b36"
 
 
 @pytest.fixture
@@ -111,3 +113,82 @@ def test_every_existing_routine_starts_at_an_open_cycle_one(
     assert sorted(tuple(cycle) for cycle in cycles) == sorted(
         (routine, 1, None) for routine in routines
     )
+
+
+def test_existing_set_records_are_grouped_into_daily_sessions_and_back(
+    migration: tuple[Connection, Config],
+) -> None:
+    connection, config = migration
+    command.downgrade(config, CYCLES)
+    lifter, other_lifter, exercise = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    connection.execute(
+        text(
+            "INSERT INTO users (id, email, password_hash, display_name) VALUES "
+            "(:a, :a_email, 'x', 'A'), (:b, :b_email, 'x', 'B')"
+        ),
+        {
+            "a": lifter,
+            "b": other_lifter,
+            "a_email": f"{lifter}@x.test",
+            "b_email": f"{other_lifter}@x.test",
+        },
+    )
+    connection.execute(
+        text("INSERT INTO exercises (id, name) VALUES (:e, :n)"),
+        {"e": exercise, "n": f"Lift {exercise}"},
+    )
+    monday = datetime(2026, 11, 2, 18, 0, tzinfo=UTC)
+    rows = [
+        # (user, reps, performed_at): two on Monday out of order, one on Tuesday
+        (lifter, 3, monday + timedelta(minutes=5)),
+        (lifter, 5, monday),
+        (lifter, 1, monday + timedelta(days=1)),
+        (other_lifter, 8, monday),
+    ]
+    for user, reps, performed_at in rows:
+        connection.execute(
+            text(
+                "INSERT INTO set_records (id, user_id, exercise_id, reps, weight, weight_unit, "
+                "performed_at) VALUES (:id, :u, :e, :r, 60, 'kg', :at)"
+            ),
+            {"id": uuid.uuid4(), "u": user, "e": exercise, "r": reps, "at": performed_at},
+        )
+    # Run the inserts' deferred foreign-key checks now and go back to deferred mode, so the
+    # migration starts as it would in its own transaction: Postgres won't ALTER a table
+    # with checks still pending
+    connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+    connection.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+
+    command.upgrade(config, SET_RECORDS_IN_SESSIONS)
+
+    sessions = connection.execute(
+        text(
+            "SELECT s.user_id, s.performed_at, s.completed, s.routine_workout_id, "
+            "array_agg(r.reps ORDER BY r.position) "
+            "FROM workout_sessions s JOIN set_records r ON r.session_id = s.id "
+            "WHERE s.user_id IN (:a, :b) "
+            "GROUP BY s.id ORDER BY s.user_id = :a DESC, s.performed_at"
+        ),
+        {"a": lifter, "b": other_lifter},
+    ).all()
+    assert [tuple(session) for session in sessions] == [
+        (lifter, monday, True, None, [5, 3]),
+        (lifter, monday + timedelta(days=1), True, None, [1]),
+        (other_lifter, monday, True, None, [8]),
+    ]
+
+    command.downgrade(config, CYCLES)
+
+    restored = connection.execute(
+        text(
+            "SELECT user_id, reps, performed_at FROM set_records "
+            "WHERE user_id = :a ORDER BY performed_at"
+        ),
+        {"a": lifter},
+    ).all()
+    # Each record gets its session's time, a microsecond apart in position order
+    assert [tuple(row) for row in restored] == [
+        (lifter, 5, monday),
+        (lifter, 3, monday + timedelta(microseconds=1)),
+        (lifter, 1, monday + timedelta(days=1)),
+    ]

@@ -4,9 +4,9 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.errors import ApiError, not_found
+from app.api.errors import ApiError
 from app.api.pagination import PageQuery, paginate
-from app.api.routine_parts import get_routine_workout, open_cycle
+from app.api.routine_parts import get_own_session, get_routine_workout, open_cycle
 from app.api.visibility import require_owned
 from app.auth.sessions import CurrentUser, now
 from app.db import DbSession
@@ -28,13 +28,6 @@ READ_OPTIONS = (
     joinedload(WorkoutSession.workout),
     joinedload(WorkoutSession.cycle),
 )
-
-
-def get_own_session(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> WorkoutSession:
-    session = db.get(WorkoutSession, id)
-    if session is None or session.user_id != user_id:
-        raise not_found()
-    return session
 
 
 def usable_slot(db: Session, id: uuid.UUID, user_id: uuid.UUID) -> RoutineWorkout:

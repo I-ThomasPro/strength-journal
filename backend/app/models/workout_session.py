@@ -14,6 +14,7 @@ from app.models.routine_workout import RoutineWorkout
 from app.models.user import User
 
 if TYPE_CHECKING:
+    from app.models.set_record import SetRecord
     from app.models.workout import Workout
 
 
@@ -54,6 +55,13 @@ class WorkoutSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     routine_workout: Mapped[RoutineWorkout | None] = relationship()
     workout: Mapped[Workout | None] = relationship()
     cycle: Mapped[RoutineCycle | None] = relationship()
+    # The sets done, in order. passive_deletes leaves deleting them to ON DELETE CASCADE
+    set_records: Mapped[list[SetRecord]] = relationship(
+        back_populates="session",
+        order_by="SetRecord.position",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         # A user's sessions, newest first; its leading user_id also serves the user cascade

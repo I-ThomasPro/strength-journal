@@ -155,6 +155,14 @@ def test_violations_and_stale_entries_are_found_in_a_router() -> None:
     assert stale_custom_routes(router.routes, registry) == [ORDER]
 
 
+def test_operation_ids_are_unique() -> None:
+    # FastAPI only warns about duplicates; generated clients would get clashing names. A
+    # resource with two nested indexes needs a second tag (see session_set_records.py)
+    ids = [op["operationId"] for path in app.openapi()["paths"].values() for op in path.values()]
+
+    assert len(ids) == len(set(ids)), sorted(id for id in ids if ids.count(id) > 1)
+
+
 def test_operation_ids_read_tag_and_action() -> None:
     operations = app.openapi()["paths"]["/api/health"]
 
