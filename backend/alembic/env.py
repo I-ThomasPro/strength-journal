@@ -2,7 +2,7 @@ from logging.config import fileConfig
 from typing import Literal
 
 from alembic import context
-from sqlalchemy import TypeDecorator, create_engine, pool
+from sqlalchemy import Connection, TypeDecorator, create_engine, pool
 
 # app.models registers every model (see its __init__) so autogenerate can see their tables
 import app.models  # noqa: F401
@@ -43,20 +43,28 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def run_migrations_on(connection: Connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        render_item=render_item,
+    )
+    # Inside a caller's transaction this doesn't commit, so a test can roll everything back
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_online() -> None:
-    """Run migrations against a live database connection"""
+    """Run migrations against a live database: the connection a caller passed in as
+    `config.attributes["connection"]` (tests do this), else a new one"""
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        run_migrations_on(connection)
+        return
     connectable = create_engine(get_url(), poolclass=pool.NullPool)
-
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            render_item=render_item,
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
+        run_migrations_on(connection)
 
 
 if context.is_offline_mode():

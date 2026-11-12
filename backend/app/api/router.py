@@ -6,6 +6,7 @@ from app.api.routes import (
     password,
     profile,
     registration,
+    routine_workouts,
     routines,
     session,
     sessions,
@@ -24,6 +25,7 @@ api_router.include_router(profile.router)
 api_router.include_router(password.router)
 api_router.include_router(exercises.router)
 api_router.include_router(routines.router)
+api_router.include_router(routine_workouts.router)
 api_router.include_router(workouts.router)
 api_router.include_router(workout_exercises.router)
 api_router.include_router(sets.router)

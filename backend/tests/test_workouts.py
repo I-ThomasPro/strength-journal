@@ -1,6 +1,7 @@
 """A routine's workouts and a workout's exercises: ordering, ownership and exercise choice"""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,12 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.models.exercise import Exercise
 from app.models.routine import Routine
+from app.models.routine_workout import RoutineWorkout
 from app.models.set import Set
 from app.models.user import User
 from app.models.workout import Workout, WorkoutExercise
 from tests.factories import (
     create_exercise,
     create_routine,
+    create_routine_workout,
     create_set,
     create_user,
     create_workout,
@@ -32,13 +35,14 @@ def make_workouts(db_session: Session, routine: Routine, *names: str) -> list[Wo
     return [create_workout(db_session, routine, name=name) for name in names]
 
 
-def workout_order(db_session: Session, routine: Routine) -> list[tuple[str, int]]:
-    """(name, position) of the routine's workouts, as stored"""
+def slot_order(db_session: Session, routine: Routine) -> list[tuple[str, int]]:
+    """(workout name, position) of the routine's cycle, as stored"""
     db_session.expire_all()
     statement = (
-        select(Workout.name, Workout.position)
-        .where(Workout.routine_id == routine.id)
-        .order_by(Workout.position)
+        select(Workout.name, RoutineWorkout.position)
+        .join(RoutineWorkout.workout)
+        .where(RoutineWorkout.routine_id == routine.id)
+        .order_by(RoutineWorkout.position)
     )
     return [tuple(row) for row in db_session.execute(statement)]
 
@@ -62,17 +66,19 @@ def numbered(*names: str) -> list[tuple[str, int]]:
 # Workouts: reading
 
 
-def test_listing_a_routines_workouts_in_order(
+def test_listing_a_routines_workouts_in_the_order_they_were_added(
     logged_in_client: TestClient, db_session: Session, routine: Routine
 ) -> None:
-    create_workout(db_session, routine, name="Day B", position=1)
-    create_workout(db_session, routine, name="Day A", position=0)
+    added = datetime(2026, 1, 1, tzinfo=UTC)
+    create_workout(db_session, routine, name="Day B", created_at=added + timedelta(days=1))
+    create_workout(db_session, routine, name="Day A", created_at=added)
 
     body = logged_in_client.get(f"/api/routines/{routine.id}/workouts").json()
 
-    assert [(w["name"], w["position"]) for w in body["items"]] == numbered("Day A", "Day B")
+    assert [workout["name"] for workout in body["items"]] == ["Day A", "Day B"]
     assert body["total"] == 2
     assert body["items"][0]["routine_id"] == str(routine.id)
+    assert "position" not in body["items"][0]
 
 
 def test_library_routines_workouts_can_be_read(
@@ -99,36 +105,21 @@ def test_another_users_workouts_are_not_found(
     assert_error(logged_in_client.get(f"/api/workouts/{uuid.uuid4()}"), 404, "not_found")
 
 
-# Workouts: adding, moving and deleting
+# Workouts: adding, renaming and deleting
 
 
-def test_creating_appends_a_workout(
+def test_creating_a_workout_leaves_the_cycle_alone(
     logged_in_client: TestClient, db_session: Session, routine: Routine
 ) -> None:
-    make_workouts(db_session, routine, "Day A")
-
-    response = logged_in_client.post(f"/api/routines/{routine.id}/workouts", json={"name": "Day B"})
+    response = logged_in_client.post(f"/api/routines/{routine.id}/workouts", json={"name": "Day A"})
 
     assert response.status_code == 201, response.text
-    assert response.json()["position"] == 1
-    assert workout_order(db_session, routine) == numbered("Day A", "Day B")
+    assert response.json()["name"] == "Day A"
+    assert "position" not in response.json()
+    assert slot_order(db_session, routine) == []
 
 
-def test_creating_at_a_position_shifts_later_workouts(
-    logged_in_client: TestClient, db_session: Session, routine: Routine
-) -> None:
-    make_workouts(db_session, routine, "Day A", "Day C")
-    path = f"/api/routines/{routine.id}/workouts"
-
-    inserted = logged_in_client.post(path, json={"name": "Day B", "position": 1})
-    past_the_end = logged_in_client.post(path, json={"name": "Day D", "position": 99})
-
-    assert inserted.json()["position"] == 1
-    assert past_the_end.json()["position"] == 3
-    assert workout_order(db_session, routine) == numbered("Day A", "Day B", "Day C", "Day D")
-
-
-@pytest.mark.parametrize("body", [{}, {"name": "  "}, {"name": "Day A", "position": -1}])
+@pytest.mark.parametrize("body", [{}, {"name": "  "}, {"name": "x" * 101}])
 def test_invalid_workouts_are_rejected(
     logged_in_client: TestClient, routine: Routine, body: dict
 ) -> None:
@@ -140,130 +131,57 @@ def test_invalid_workouts_are_rejected(
 def test_renaming_a_workout(
     logged_in_client: TestClient, db_session: Session, routine: Routine
 ) -> None:
-    _, day_b = make_workouts(db_session, routine, "Day A", "Day B")
+    (workout,) = make_workouts(db_session, routine, "Day A")
 
-    response = logged_in_client.patch(f"/api/workouts/{day_b.id}", json={"name": "Legs"})
+    response = logged_in_client.patch(f"/api/workouts/{workout.id}", json={"name": "Legs"})
 
     assert response.status_code == 200, response.text
-    assert (response.json()["name"], response.json()["position"]) == ("Legs", 1)
-    assert workout_order(db_session, routine) == numbered("Day A", "Legs")
+    assert response.json()["name"] == "Legs"
 
 
-def test_moving_a_workout_forwards_and_backwards(
+def test_deleting_a_workout_takes_it_out_of_the_cycle_and_removes_its_contents(
     logged_in_client: TestClient, db_session: Session, routine: Routine
 ) -> None:
-    a, _, _, d = make_workouts(db_session, routine, "A", "B", "C", "D")
-
-    forwards = logged_in_client.patch(f"/api/workouts/{a.id}", json={"position": 2})
-    assert forwards.json()["position"] == 2
-    assert workout_order(db_session, routine) == numbered("B", "C", "A", "D")
-
-    backwards = logged_in_client.patch(f"/api/workouts/{d.id}", json={"position": 0})
-    assert backwards.json()["position"] == 0
-    assert workout_order(db_session, routine) == numbered("D", "B", "C", "A")
-
-
-def test_deleting_a_workout_closes_the_gap_and_removes_its_contents(
-    logged_in_client: TestClient, db_session: Session, routine: Routine
-) -> None:
-    _, day_b, _ = make_workouts(db_session, routine, "Day A", "Day B", "Day C")
-    entry = create_workout_exercise(db_session, day_b)
+    day_a, day_b, day_c = make_workouts(db_session, routine, "Day A", "Day B", "Day C")
+    for workout in [day_a, day_b, day_a, day_c]:
+        create_routine_workout(db_session, workout)
+    entry = create_workout_exercise(db_session, day_a)
     entry_id, exercise_id = entry.id, entry.exercise_id
     create_set(db_session, entry)
 
-    response = logged_in_client.delete(f"/api/workouts/{day_b.id}")
+    response = logged_in_client.delete(f"/api/workouts/{day_a.id}")
 
     assert response.status_code == 204, response.text
-    assert workout_order(db_session, routine) == numbered("Day A", "Day C")
+    assert slot_order(db_session, routine) == numbered("Day B", "Day C")
     assert db_session.get(WorkoutExercise, entry_id) is None
     assert db_session.scalar(select(func.count()).select_from(Set)) == 0
     assert db_session.get(Exercise, exercise_id) is not None
 
 
-# Workouts: reordering all at once
-
-
-def test_reordering_all_workouts(
-    logged_in_client: TestClient, db_session: Session, routine: Routine
-) -> None:
-    a, b, c = make_workouts(db_session, routine, "A", "B", "C")
-    ids = [str(workout.id) for workout in (c, a, b)]
-
-    response = logged_in_client.put(
-        f"/api/routines/{routine.id}/workouts/order", json={"workout_ids": ids}
-    )
-
-    assert response.status_code == 200, response.text
-    assert [(w["name"], w["position"]) for w in response.json()] == numbered("C", "A", "B")
-    assert workout_order(db_session, routine) == numbered("C", "A", "B")
-
-
-def test_reordering_can_swap_two_workouts(
-    logged_in_client: TestClient, db_session: Session, routine: Routine
-) -> None:
-    a, b = make_workouts(db_session, routine, "A", "B")
-
-    response = logged_in_client.put(
-        f"/api/routines/{routine.id}/workouts/order",
-        json={"workout_ids": [str(b.id), str(a.id)]},
-    )
-
-    assert response.status_code == 200, response.text
-    assert workout_order(db_session, routine) == numbered("B", "A")
-
-
-def test_a_reorder_must_list_each_workout_exactly_once(
-    logged_in_client: TestClient, db_session: Session, routine: Routine
-) -> None:
-    a, b = make_workouts(db_session, routine, "A", "B")
-    (elsewhere,) = make_workouts(db_session, create_routine(db_session), "Other")
-    path = f"/api/routines/{routine.id}/workouts/order"
-
-    for ids in [[a.id], [a.id, b.id, elsewhere.id], [a.id, a.id], [b.id, elsewhere.id], []]:
-        response = logged_in_client.put(path, json={"workout_ids": [str(id) for id in ids]})
-        assert_error(response, 422, "invalid")
-    assert workout_order(db_session, routine) == numbered("A", "B")
-
-
 # Workouts: library and other users' routines are protected
 
 
-def test_library_routine_workouts_cant_be_changed(
-    logged_in_client: TestClient, db_session: Session
+@pytest.mark.parametrize(
+    ("owner", "status_code", "code"),
+    [("library", 403, "read_only"), ("someone else", 404, "not_found")],
+)
+def test_workouts_of_routines_that_arent_yours_cant_be_changed(
+    logged_in_client: TestClient, db_session: Session, owner: str, status_code: int, code: str
 ) -> None:
-    library = create_routine(db_session)
-    (workout,) = make_workouts(db_session, library, "Day A")
-    reorder = {"workout_ids": [str(workout.id)]}
+    user = None if owner == "library" else create_user(db_session)
+    routine = create_routine(db_session, owner=user)
+    (workout,) = make_workouts(db_session, routine, "Day A")
+    create_routine_workout(db_session, workout)
 
     responses = [
-        logged_in_client.post(f"/api/routines/{library.id}/workouts", json={"name": "New"}),
-        logged_in_client.put(f"/api/routines/{library.id}/workouts/order", json=reorder),
+        logged_in_client.post(f"/api/routines/{routine.id}/workouts", json={"name": "New"}),
         logged_in_client.patch(f"/api/workouts/{workout.id}", json={"name": "Renamed"}),
         logged_in_client.delete(f"/api/workouts/{workout.id}"),
     ]
 
     for response in responses:
-        assert_error(response, 403, "read_only")
-    assert workout_order(db_session, library) == numbered("Day A")
-
-
-def test_another_users_routine_workouts_cant_be_changed(
-    logged_in_client: TestClient, db_session: Session
-) -> None:
-    theirs = create_routine(db_session, owner=create_user(db_session))
-    (workout,) = make_workouts(db_session, theirs, "Day A")
-    reorder = {"workout_ids": [str(workout.id)]}
-
-    responses = [
-        logged_in_client.post(f"/api/routines/{theirs.id}/workouts", json={"name": "New"}),
-        logged_in_client.put(f"/api/routines/{theirs.id}/workouts/order", json=reorder),
-        logged_in_client.patch(f"/api/workouts/{workout.id}", json={"name": "Renamed"}),
-        logged_in_client.delete(f"/api/workouts/{workout.id}"),
-    ]
-
-    for response in responses:
-        assert_error(response, 404, "not_found")
-    assert workout_order(db_session, theirs) == numbered("Day A")
+        assert_error(response, status_code, code)
+    assert slot_order(db_session, routine) == numbered("Day A")
 
 
 # Workout exercises

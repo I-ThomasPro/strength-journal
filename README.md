@@ -47,7 +47,7 @@ Models live in `backend/app/models/`, one module per table, and build on `app/mo
 - `TimestampMixin`: `created_at` / `updated_at`, both defaulting to now; `updated_at` is bumped on update
 - `WeightUnit` (`kg` / `lb`): store it in a `WeightUnitType()` column and add `weight_unit_check("<column>")` to the table's `__table_args__`
 - Other fixed sets of values (e.g. `ExerciseType`): define a `StrEnum`, store it in a `TextEnum(MyEnum)` column and add `enum_check("<column>", MyEnum)` to `__table_args__`
-- Ordered children (a Routine's workouts, a Workout's exercises, a workout exercise's sets): an integer `position` with `CHECK (position >= 0)` and `UNIQUE (parent_id, position) DEFERRABLE INITIALLY DEFERRED`, so items can be reordered within one transaction. Tests force the check with `check_deferred_constraints()` from `backend/tests/helpers.py`
+- Ordered children (a Routine's slots, a Workout's exercises, a workout exercise's sets): an integer `position` with `CHECK (position >= 0)` and `UNIQUE (parent_id, position) DEFERRABLE INITIALLY DEFERRED`, so items can be reordered within one transaction. Tests force the check with `check_deferred_constraints()` from `backend/tests/helpers.py`
 - References to an exercise from another table (workout exercises, set records) use `ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED`. An exercise in use can't be deleted, and the check waits until commit so deleting a user can cascade through both their custom exercises and their routines
 
 Model tests use the `db_session` fixture and the factories in `backend/tests/factories.py` (e.g. `create_user(db_session, email=...)`).
@@ -96,7 +96,9 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
   - `create` appends unless the body gives a `position`; then later items shift. A `position` past the end goes last
   - `PATCH` with `position` moves one item
   - `PUT .../order` with every child's id replaces the whole order (`reorder()` in `app/api/routine_parts.py` gives a 422 unless each child is listed exactly once)
-- **A routine's parts** (`app/api/routine_parts.py`): `get_workout()` and `get_workout_exercise()` load one only if its routine is visible; changes then need `require_owned(routine, user_id)`. `get_usable_exercise()` gives a 422 for an exercise the user can't see
+- **A routine's parts** (`app/api/routine_parts.py`): `get_routine_workout()`, `get_workout()`, `get_workout_exercise()` and `get_set()` load one only if its routine is visible; changes then need `require_owned(routine, user_id)`. `get_routine_workout_target()` and `get_usable_exercise()` give a 422 for a workout outside the routine or an exercise the user can't see
+- **A routine's cycle:** workouts belong to a routine but have no position. The order they're done in is the routine's slots (`routine_workouts`, the `routine-workouts` resource), and a workout can fill several slots (e.g. A, B, A). A composite foreign key keeps each slot pointing at its own routine's workouts
+- **Migration tests:** `tests/test_migrations.py` runs migrations inside a rolled-back transaction (Alembic gets the connection through `config.attributes["connection"]`), to check data moves up and down
 - **Decimals:** weights are JSON strings like `"102.50"`, so they round-trip exactly. Request fields use `Weight` from `app/schemas/common.py` (0 to 9999.99, matching the columns), which keeps two decimal places, so a weight sent as `102.5` comes back as `"102.50"`
 - **Nested responses:** load every level with `selectinload`/`joinedload` options (see `DETAIL_OPTIONS` in `app/api/routes/routines.py`), so a response takes the same number of queries whatever its size. `tests/test_routines.py` checks this by counting queries
 

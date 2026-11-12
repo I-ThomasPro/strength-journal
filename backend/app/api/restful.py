@@ -61,7 +61,7 @@ CUSTOM_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/routines/{id}/copy"): (
         "Copies a routine and all its contents, which `create` doesn't express"
     ),
-    ("PUT", "/api/routines/{routine_id}/workouts/order"): REORDER,
+    ("PUT", "/api/routines/{routine_id}/routine-workouts/order"): REORDER,
     ("PUT", "/api/set-records/{id}"): (
         "Idempotent create-or-replace with a client-generated id, so logging is safe to retry "
         "after a dropped connection"

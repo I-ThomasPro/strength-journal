@@ -3,6 +3,7 @@
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +19,7 @@ from app.models.workout import Workout, WorkoutExercise
 from tests.factories import (
     create_exercise,
     create_routine,
+    create_routine_workout,
     create_set,
     create_set_record,
     create_user,
@@ -53,10 +55,13 @@ def counting_queries(db_session: Session) -> Iterator[list[str]]:
 
 
 def build_routine(db_session: Session, owner: User, size: int) -> Routine:
-    """A routine with `size` workouts, each with `size` exercises of `size` sets"""
+    """A routine with `size` workouts, each with `size` exercises of `size` sets, and a cycle
+    of `size` slots per workout"""
     routine = create_routine(db_session, owner=owner)
     for _ in range(size):
         workout = create_workout(db_session, routine)
+        for _ in range(size):
+            create_routine_workout(db_session, workout)
         for _ in range(size):
             exercise = create_exercise(db_session, owner=owner)
             workout_exercise = create_workout_exercise(db_session, workout, exercise)
@@ -167,9 +172,14 @@ def test_the_detail_returns_everything_in_position_order(
     routine = create_routine(db_session, owner=current_user)
     squat = create_exercise(db_session, name="Squat")
     bench = create_exercise(db_session, name="Bench Press", owner=current_user)
-    # Each level is created out of order: later positions first
-    day_b = create_workout(db_session, routine, name="Day B", position=1)
-    day_a = create_workout(db_session, routine, name="Day A", position=0)
+    # Workouts are listed in the order they were added; the other levels are created out of
+    # order (later positions first)
+    added = datetime(2026, 1, 1, tzinfo=UTC)
+    day_b = create_workout(db_session, routine, name="Day B", created_at=added + timedelta(1))
+    day_a = create_workout(db_session, routine, name="Day A", created_at=added)
+    create_routine_workout(db_session, day_a, position=2)
+    create_routine_workout(db_session, day_b, position=1)
+    create_routine_workout(db_session, day_a, position=0)
     second = create_workout_exercise(db_session, day_a, bench, position=1)
     first = create_workout_exercise(db_session, day_a, squat, position=0)
     create_workout_exercise(db_session, day_b, squat, position=0)
@@ -182,6 +192,12 @@ def test_the_detail_returns_everything_in_position_order(
     assert response.status_code == 200, response.text
     body = response.json()
     assert [workout["name"] for workout in body["workouts"]] == ["Day A", "Day B"]
+    assert "position" not in body["workouts"][0]
+    assert [(slot["position"], slot["workout"]) for slot in body["slots"]] == [
+        (0, {"id": str(day_a.id), "name": "Day A"}),
+        (1, {"id": str(day_b.id), "name": "Day B"}),
+        (2, {"id": str(day_a.id), "name": "Day A"}),
+    ]
     exercises = body["workouts"][0]["exercises"]
     assert [entry["id"] for entry in exercises] == [str(first.id), str(second.id)]
     assert exercises[0]["exercise"] == {"id": str(squat.id), "name": "Squat", "type": "strength"}

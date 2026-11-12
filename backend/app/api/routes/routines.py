@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 from fastapi import APIRouter, status
 from sqlalchemy import func, select
@@ -10,6 +11,7 @@ from app.api.visibility import Scope, get_visible_or_404, in_scope, require_owne
 from app.auth.sessions import CurrentUser
 from app.db import DbSession
 from app.models.routine import Routine
+from app.models.routine_workout import RoutineWorkout
 from app.models.set import Set
 from app.models.workout import Workout, WorkoutExercise
 from app.schemas.common import Page
@@ -30,6 +32,7 @@ DETAIL_OPTIONS = (
     selectinload(Routine.workouts)
     .selectinload(Workout.exercises)
     .options(joinedload(WorkoutExercise.exercise), selectinload(WorkoutExercise.sets)),
+    selectinload(Routine.slots).joinedload(RoutineWorkout.workout),
 )
 
 
@@ -77,7 +80,7 @@ def create(body: RoutineCreate, user: CurrentUser, db: DbSession) -> RoutineDeta
 
 @router.get("/{id}")
 def show(id: uuid.UUID, user: CurrentUser, db: DbSession) -> RoutineDetail:
-    """The whole routine: its workouts, their exercises and sets"""
+    """The whole routine: its workouts with their exercises and sets, and its cycle of slots"""
     routine = db.scalar(
         select(Routine)
         .where(Routine.id == id, visible_to(Routine, user.id))
@@ -91,8 +94,8 @@ def show(id: uuid.UUID, user: CurrentUser, db: DbSession) -> RoutineDetail:
 @router.post("/{id}/copy", status_code=status.HTTP_201_CREATED)
 def copy(id: uuid.UUID, body: RoutineCopy, user: CurrentUser, db: DbSession) -> RoutineDetail:
     """Copy a library routine or one of the user's own into a new routine the user owns:
-    its workouts, their exercises and sets, keeping every position. Exercises are
-    referenced, not copied"""
+    its workouts, their exercises and sets, and its cycle of slots, keeping every position.
+    Exercises are referenced, not copied"""
     source = db.scalar(
         select(Routine)
         .where(Routine.id == id, visible_to(Routine, user.id))
@@ -108,8 +111,15 @@ def copy(id: uuid.UUID, body: RoutineCopy, user: CurrentUser, db: DbSession) -> 
             body.description if "description" in body.model_fields_set else source.description
         ),
     )
-    for workout in source.workouts:
-        workout_copy = Workout(name=workout.name, position=workout.position)
+    copies: dict[uuid.UUID, Workout] = {}
+    # Workouts are listed by created_at. Copies made in one transaction would all share it,
+    # so step each one by a microsecond to keep the source's order
+    copied_at = db.scalar(select(func.now()))
+    for index, workout in enumerate(source.workouts):
+        workout_copy = Workout(
+            name=workout.name, created_at=copied_at + timedelta(microseconds=index)
+        )
+        copies[workout.id] = workout_copy
         routine.workouts.append(workout_copy)
         for entry in workout.exercises:
             entry_copy = WorkoutExercise(exercise_id=entry.exercise_id, position=entry.position)
@@ -123,6 +133,10 @@ def copy(id: uuid.UUID, body: RoutineCopy, user: CurrentUser, db: DbSession) -> 
                 )
                 for set_ in entry.sets
             )
+    routine.slots.extend(
+        RoutineWorkout(workout=copies[slot.workout_id], position=slot.position)
+        for slot in source.slots
+    )
     db.add(routine)
     db.flush()
     # Load the copy afresh, as `show` would

@@ -8,6 +8,7 @@ from app.models import (  # noqa: F401
     exercise,
     invite,
     routine,
+    routine_workout,
     set,
     set_record,
     user,
