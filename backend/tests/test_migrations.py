@@ -16,6 +16,7 @@ SLOTS = "83e34e0478bc"
 CYCLES = "e85f55a6a584"
 SET_RECORDS_IN_SESSIONS = "c379d18a8b36"
 USERNAMES = "7f89aabbe5bf"
+ADMINS = "374a4897770d"
 
 
 @pytest.fixture
@@ -227,3 +228,23 @@ def test_each_email_becomes_a_username_and_back(migration: tuple[Connection, Con
         text("SELECT email FROM users WHERE id = :id"), {"id": lifter}
     ).scalar_one()
     assert restored == email
+
+
+def test_existing_users_arent_admins(migration: tuple[Connection, Config]) -> None:
+    connection, config = migration
+    command.downgrade(config, USERNAMES)
+    lifter = uuid.uuid4()
+    connection.execute(
+        text(
+            "INSERT INTO users (id, username, password_hash, display_name) "
+            "VALUES (:id, :username, 'x', 'Lifter')"
+        ),
+        {"id": lifter, "username": f"lifter-{lifter.hex[:8]}"},
+    )
+
+    command.upgrade(config, ADMINS)
+
+    is_admin = connection.execute(
+        text("SELECT is_admin FROM users WHERE id = :id"), {"id": lifter}
+    ).scalar_one()
+    assert is_admin is False

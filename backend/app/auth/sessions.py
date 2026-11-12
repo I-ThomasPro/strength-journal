@@ -137,3 +137,13 @@ def get_current_user(session: CurrentSession) -> User:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_admin(user: CurrentUser) -> User:
+    """The logged-in user if they're an admin: 403 `admin_only` otherwise (401 logged out)"""
+    if not user.is_admin:
+        raise ApiError(status.HTTP_403_FORBIDDEN, "admin_only", "Only admins can do that")
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]

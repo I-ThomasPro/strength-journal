@@ -14,6 +14,7 @@ The API is a [FastAPI](https://fastapi.tiangolo.com/) app in `backend/`, using S
 make db-up      # start Postgres 18 (creates strength_journal and strength_journal_test)
 make install    # install dependencies into backend/.venv
 make migrate    # apply database migrations
+make create-admin  # create your account, as an admin (asks for its details)
 make dev        # run the API on http://localhost:8000
 ```
 
@@ -111,14 +112,16 @@ Model tests use the `db_session` fixture and the factories in `backend/tests/fac
 API tests use the `client` fixture (or `client_for(app)` for a test-only app) and `assert_error()` from `backend/tests/helpers.py`. For endpoints that need a login, use `logged_in_client`, which is logged in as `current_user` (password `TEST_PASSWORD`) and sends the CSRF header.
 
 ### Accounts and sessions
-Sign-up is invite-only. Create a single-use code (valid 7 days unless `--days` is given):
+Admins create accounts. Create the first admin from the command line:
 ```bash
-cd backend
-uv run python -m app.cli create-invite
+make create-admin   # asks for the username, display name, weight unit and password (twice)
+cd backend && uv run python -m app.cli create-admin --username coach --display-name Coach --password-stdin < password.txt
 ```
+`--password-stdin` reads the password from the first line of stdin, for scripts and tests. It needs `--username` and `--display-name`, and the weight unit defaults to kg.
 
+- **Admins:** users with `is_admin`. `POST /api/users` `{username, display_name, password, weight_unit?, is_admin?}` creates an account that can log in straight away (201). Only admins can call it: 403 `admin_only` for anyone else. Guard other admin-only endpoints with the `AdminUser` dependency (or `require_admin`) from `app/auth/sessions.py`
 - **Usernames:** accounts log in with a username; there are no emails. A new username is 3 to 32 letters, digits, `.`, `_` or `-`, stored lowercased, so logging in ignores case. Accounts from before usernames (#65) kept their email as their username
-- **Sign up:** `POST /api/registration` `{invite_code, username, password, display_name, weight_unit?}` (409 `duplicate_username` if taken)
+- **Sign up:** `POST /api/registration` `{invite_code, username, password, display_name, weight_unit?}` (409 `duplicate_username` if taken). No screen uses it; create a single-use code with `python -m app.cli create-invite [--days 7]`
 - **Log in:** `POST /api/session` `{username, password}`; check who's logged in with `GET /api/session`; log out with `DELETE /api/session`
 - **Profile:** `GET /api/profile`; `PATCH /api/profile` `{display_name?, weight_unit?}`
 - **Password:** `PATCH /api/password` `{current_password, new_password}` (401 `invalid_credentials` if the current one is wrong). It logs out every other device
@@ -138,9 +141,9 @@ backend/
 │   ├── main.py          # create_app(): routers, docs under /api
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── db.py            # Base, engine, get_db / DbSession dependency
-│   ├── cli.py           # admin commands (create-invite)
+│   ├── cli.py           # admin commands (create-admin, create-invite)
 │   ├── openapi.py       # exports the OpenAPI schema for the frontend (make openapi)
-│   ├── auth/            # passwords, sessions + CurrentUser, invites, request guards
+│   ├── auth/            # passwords, sessions + CurrentUser/AdminUser, accounts, invites, request guards
 │   ├── models/          # one module per table; common.py holds shared mixins and types
 │   ├── schemas/         # Pydantic request/response models; common.py holds pages, forms, errors
 │   └── api/

@@ -385,6 +385,48 @@
         }
       }
     },
+    "/api/users": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Create",
+        "description": "Create an account that can log in straight away. Admins only: 403 `admin_only` for\nanyone else. A taken username is 409 `duplicate_username`",
+        "operationId": "users-create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/exercises": {
       "get": {
         "tags": [
@@ -4421,6 +4463,46 @@
         "type": "object",
         "title": "SetUpdate"
       },
+      "UserCreate": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "title": "Username"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 10,
+            "title": "Password"
+          },
+          "weight_unit": {
+            "$ref": "#/components/schemas/WeightUnit",
+            "default": "kg"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "display_name",
+          "password"
+        ],
+        "title": "UserCreate",
+        "description": "A new account, created by an admin (or `python -m app.cli create-admin`)"
+      },
       "UserRead": {
         "properties": {
           "id": {
@@ -4438,6 +4520,10 @@
           },
           "weight_unit": {
             "$ref": "#/components/schemas/WeightUnit"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin"
           }
         },
         "type": "object",
@@ -4445,7 +4531,8 @@
           "id",
           "username",
           "display_name",
-          "weight_unit"
+          "weight_unit",
+          "is_admin"
         ],
         "title": "UserRead"
       },

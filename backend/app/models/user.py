@@ -1,4 +1,4 @@
-from sqlalchemy import Text
+from sqlalchemy import Text, false
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.db import Base
@@ -18,6 +18,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Unique, and stored lowercased so logging in ignores case
     username: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # Admins create accounts (POST /api/users); the first comes from `python -m app.cli
+    # create-admin`
+    is_admin: Mapped[bool] = mapped_column(nullable=False, default=False, server_default=false())
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     weight_unit: Mapped[WeightUnit] = mapped_column(
         WeightUnitType(),

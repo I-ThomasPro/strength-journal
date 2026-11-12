@@ -44,6 +44,7 @@ def test_showing_the_profile(logged_in_client: TestClient, current_user: User) -
         "username": current_user.username,
         "display_name": current_user.display_name,
         "weight_unit": "kg",
+        "is_admin": False,
     }
 
 

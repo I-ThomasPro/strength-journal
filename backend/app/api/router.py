@@ -14,6 +14,7 @@ from app.api.routes import (
     sessions,
     set_records,
     sets,
+    users,
     workout_exercises,
     workout_sessions,
     workouts,
@@ -26,6 +27,7 @@ api_router.include_router(session.router)
 api_router.include_router(sessions.router)
 api_router.include_router(profile.router)
 api_router.include_router(password.router)
+api_router.include_router(users.router)
 api_router.include_router(exercises.router)
 api_router.include_router(routines.router)
 api_router.include_router(routine_workouts.router)
