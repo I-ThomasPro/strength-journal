@@ -28,8 +28,8 @@ def _dummy_hash() -> str:
 
 
 def verify_dummy_password(password: str) -> None:
-    """Spend the same time as a real check when the email is unknown, so login timing doesn't
-    reveal which emails have accounts"""
+    """Spend the same time as a real check when the username is unknown, so login timing
+    doesn't reveal which usernames have accounts"""
     verify_password(password, _dummy_hash())
 
 

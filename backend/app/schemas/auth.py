@@ -8,10 +8,18 @@ from app.auth.security import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from app.models.common import WeightUnit
 from app.schemas.common import ReadModel, UpdateModel, omitted
 
-Email = Annotated[
+# A new username: 3-32 letters, digits, dots, underscores or hyphens once trimmed, stored
+# lowercased (Pydantic checks the pattern before lowercasing, so it allows capitals).
+# Usernames carried over from emails (#65) don't follow these rules, so only new ones are
+# checked; logging in takes any GivenUsername
+Username = Annotated[
     str,
     StringConstraints(
-        strip_whitespace=True, to_lower=True, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+        strip_whitespace=True,
+        to_lower=True,
+        min_length=3,
+        max_length=32,
+        pattern=r"^[A-Za-z0-9._-]+$",
     ),
 ]
 Password = Annotated[
@@ -22,24 +30,28 @@ DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length
 
 class RegistrationCreate(BaseModel):
     invite_code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-    email: Email
+    username: Username
     password: Password
     display_name: DisplayName
     weight_unit: WeightUnit = WeightUnit.KG
 
 
-# Any length is accepted when checking a password; a wrong one just fails to match
+# Logging in accepts any username or password up to these lengths; a wrong one just fails to
+# match (254 fits the emails carried over as usernames)
+GivenUsername = Annotated[
+    str, StringConstraints(strip_whitespace=True, to_lower=True, max_length=254)
+]
 GivenPassword = Annotated[str, StringConstraints(max_length=MAX_PASSWORD_LENGTH)]
 
 
 class SessionCreate(BaseModel):
-    email: Email
+    username: GivenUsername
     password: GivenPassword
 
 
 class UserRead(ReadModel):
     id: uuid.UUID
-    email: str
+    username: str
     display_name: str
     weight_unit: WeightUnit
 

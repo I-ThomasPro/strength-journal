@@ -21,7 +21,7 @@ from app.models.workout_session import WorkoutSession
 def create_user(session: Session, **overrides: object) -> User:
     unique = uuid.uuid4().hex[:12]
     fields: dict[str, object] = {
-        "email": f"user-{unique}@example.com",
+        "username": f"user-{unique}",
         "password_hash": "not-a-real-hash",
         "display_name": f"User {unique}",
     }

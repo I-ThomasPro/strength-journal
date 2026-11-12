@@ -96,7 +96,7 @@ def not_authenticated() -> ApiError:
     return ApiError(status.HTTP_401_UNAUTHORIZED, "not_authenticated", "You're not logged in")
 
 
-def invalid_credentials(detail: str = "Wrong email or password") -> ApiError:
+def invalid_credentials(detail: str = "Wrong username or password") -> ApiError:
     return ApiError(status.HTTP_401_UNAUTHORIZED, "invalid_credentials", detail)
 
 

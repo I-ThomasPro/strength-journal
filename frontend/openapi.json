@@ -125,7 +125,7 @@
           "session"
         ],
         "summary": "Create",
-        "description": "Log in. A wrong email and a wrong password get the same response",
+        "description": "Log in. A wrong username and a wrong password get the same response",
         "operationId": "session-create",
         "requestBody": {
           "content": {
@@ -3435,11 +3435,12 @@
             "minLength": 1,
             "title": "Invite Code"
           },
-          "email": {
+          "username": {
             "type": "string",
-            "maxLength": 254,
-            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
-            "title": "Email"
+            "maxLength": 32,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "title": "Username"
           },
           "password": {
             "type": "string",
@@ -3461,7 +3462,7 @@
         "type": "object",
         "required": [
           "invite_code",
-          "email",
+          "username",
           "password",
           "display_name"
         ],
@@ -3914,11 +3915,10 @@
       },
       "SessionCreate": {
         "properties": {
-          "email": {
+          "username": {
             "type": "string",
             "maxLength": 254,
-            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
-            "title": "Email"
+            "title": "Username"
           },
           "password": {
             "type": "string",
@@ -3928,7 +3928,7 @@
         },
         "type": "object",
         "required": [
-          "email",
+          "username",
           "password"
         ],
         "title": "SessionCreate"
@@ -4428,9 +4428,9 @@
             "format": "uuid",
             "title": "Id"
           },
-          "email": {
+          "username": {
             "type": "string",
-            "title": "Email"
+            "title": "Username"
           },
           "display_name": {
             "type": "string",
@@ -4443,7 +4443,7 @@
         "type": "object",
         "required": [
           "id",
-          "email",
+          "username",
           "display_name",
           "weight_unit"
         ],

@@ -38,21 +38,21 @@ def test_updated_at_changes_on_update(db_session: Session) -> None:
     assert user.updated_at > long_ago
 
 
-def test_email_is_stored_lowercased(db_session: Session) -> None:
-    user = create_user(db_session, email="Mixed.Case@Example.COM")
+def test_username_is_stored_lowercased(db_session: Session) -> None:
+    user = create_user(db_session, username="Mixed.Case")
 
     stored = db_session.execute(
-        text("SELECT email FROM users WHERE id = :id"), {"id": user.id}
+        text("SELECT username FROM users WHERE id = :id"), {"id": user.id}
     ).scalar_one()
-    assert stored == "mixed.case@example.com"
+    assert stored == "mixed.case"
 
 
-@pytest.mark.parametrize("second_email", ["lifter@example.com", "LIFTER@example.com"])
-def test_duplicate_email_is_rejected(db_session: Session, second_email: str) -> None:
-    create_user(db_session, email="lifter@example.com")
+@pytest.mark.parametrize("second_username", ["lifter", "LIFTER"])
+def test_duplicate_username_is_rejected(db_session: Session, second_username: str) -> None:
+    create_user(db_session, username="lifter")
 
-    with pytest.raises(IntegrityError, match="uq_users_email"):
-        create_user(db_session, email=second_email)
+    with pytest.raises(IntegrityError, match="uq_users_username"):
+        create_user(db_session, username=second_username)
 
 
 @pytest.mark.parametrize("unit", ["lb", WeightUnit.LB])

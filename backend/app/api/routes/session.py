@@ -24,8 +24,8 @@ router = APIRouter(prefix="/session", tags=["session"])
     dependencies=[Depends(require_csrf_if_logged_in)],
 )
 def create(body: SessionCreate, db: DbSession, response: Response) -> SessionRead:
-    """Log in. A wrong email and a wrong password get the same response"""
-    user = db.scalar(select(User).where(User.email == body.email))
+    """Log in. A wrong username and a wrong password get the same response"""
+    user = db.scalar(select(User).where(User.username == body.username))
     if user is None:
         verify_dummy_password(body.password)
         raise invalid_credentials()

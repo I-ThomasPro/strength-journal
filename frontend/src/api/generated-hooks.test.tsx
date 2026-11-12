@@ -11,7 +11,7 @@ import { useSessionCreate } from '@/api/generated/session'
 import { renderWithQueryClient } from '@/test/render'
 import { server } from '@/test/server'
 
-const user = { id: 'u1', email: 'lifter@example.com', display_name: 'Lifter', weight_unit: 'kg' }
+const user = { id: 'u1', username: 'lifter', display_name: 'Lifter', weight_unit: 'kg' }
 
 function Health() {
   const { data } = useHealthShow()
@@ -68,7 +68,7 @@ function LoginButton() {
       <button
         type="button"
         onClick={() => {
-          login.mutate({ data: { email: 'lifter@example.com', password: 'wrong-password' } })
+          login.mutate({ data: { username: 'lifter', password: 'wrong-password' } })
         }}
       >
         Log in
@@ -86,7 +86,7 @@ it('gives a generated hook the API’s error', async () => {
   server.use(
     http.post('/api/session', () =>
       HttpResponse.json(
-        { detail: 'Wrong email or password', code: 'invalid_credentials' },
+        { detail: 'Wrong username or password', code: 'invalid_credentials' },
         { status: 401 },
       ),
     ),
@@ -96,6 +96,6 @@ it('gives a generated hook the API’s error', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'invalid_credentials: Wrong email or password',
+    'invalid_credentials: Wrong username or password',
   )
 })

@@ -27,7 +27,7 @@ def claim_invite(db: Session, code: str) -> Invite:
     """Lock an unused, unexpired invite for this sign-up; 422 `invalid_invite` otherwise.
 
     Call this before anything else in a sign-up, so a bad invite fails the same way whatever
-    else was sent (e.g. a taken email can't be discovered without a valid invite). The row
+    else was sent (e.g. a taken username can't be discovered without a valid invite). The row
     lock stops two sign-ups using the same invite.
     """
     invite = db.scalar(select(Invite).where(Invite.code_hash == hash_token(code)).with_for_update())
