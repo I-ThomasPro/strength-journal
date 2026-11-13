@@ -1,7 +1,8 @@
+import { onlineManager } from '@tanstack/react-query'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiFetch } from '@/api/client'
 import { sessionQueryKey } from '@/auth/session'
@@ -26,6 +27,10 @@ function answerLogins(respond: () => Response | Promise<Response>) {
 function loginFails(status: number, body: object) {
   return answerLogins(() => HttpResponse.json(body, { status }))
 }
+
+afterEach(() => {
+  onlineManager.setOnline(true)
+})
 
 async function logIn(username = 'Lifter', password = PASSWORD) {
   await userEvent.type(await screen.findByLabelText('Username'), username)
@@ -105,6 +110,17 @@ describe('logging in', () => {
   it('says when the server can’t be reached', async () => {
     answerLogins(() => HttpResponse.error())
     renderApp('/login')
+
+    await logIn()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t reach the server')
+  })
+
+  it('says so at once when the browser is offline, rather than waiting', async () => {
+    answerLogins(() => HttpResponse.error())
+    renderApp('/login')
+    await screen.findByLabelText('Username')
+    onlineManager.setOnline(false)
 
     await logIn()
 

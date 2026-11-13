@@ -206,7 +206,9 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
 - **Session** (`src/auth/`):
   - `SessionGate`, the root route, loads `GET /api/session` before any page shows, with a splash meanwhile, and keeps the CSRF token in step with it
   - Components read the user with `useSession()` (`{status, user}`). Being logged out is `status: 'logged-out'`, not an error
-  - The session lives in the query cache under `sessionQueryKey`: logging in stores the response there with `setQueryData`, and logging out will clear it
+  - The session lives in the query cache under `sessionQueryKey`: logging in stores the response there with `setQueryData`
+  - **Logging out:** `useLogout()` (`src/auth/logout.ts`) sends `DELETE /api/session`. It then sets the session to `null`, which clears the CSRF token and sends the guard to `/login`, and removes every other cached query, so nothing shows after the next login. A session that had already expired is forgotten too; any other failure leaves the user logged in, with `logoutErrorMessage()` saying why
+  - **Offline:** login and logout use `networkMode: 'always'`. They try even when the browser says it's offline, so the user hears at once that it didn't work, instead of the request waiting for the network (TanStack's default, which offline workout logging will rely on)
   - **Guards** (`src/auth/guards.tsx`):
     - `RequireLogin` wraps the signed-in pages and sends a logged-out user to `/login?next=<where they were>`
     - `RedirectIfLoggedIn` wraps the signed-out pages and sends a logged-in user on to `?next=` or Train. That's also how the login page moves on once it stores the session. `safeNext()` keeps the redirect on this site

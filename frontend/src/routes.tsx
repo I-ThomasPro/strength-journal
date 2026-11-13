@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react'
 import { Navigate, type RouteObject } from 'react-router'
 
 import { RedirectIfLoggedIn, RequireLogin } from '@/auth/guards'
@@ -9,7 +10,16 @@ import { tabs } from '@/navigation'
 import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { PlaceholderPage } from '@/pages/placeholder-page'
+import { ProfilePage } from '@/pages/profile-page'
 import { RootErrorPage, RouteErrorPage } from '@/pages/route-error-page'
+
+/** Each tab's page; placeholders until their screens are built */
+const tabPages: Record<(typeof tabs)[number]['path'], ReactElement> = {
+  '/train': <PlaceholderPage />,
+  '/routines': <PlaceholderPage />,
+  '/history': <PlaceholderPage />,
+  '/profile': <ProfilePage />,
+}
 
 /** A route's title, for its layout's header and the browser tab (see usePageTitle) */
 function titled(title: string): RouteHandle {
@@ -48,7 +58,7 @@ export const routes: RouteObject[] = [
                   { index: true, element: <Navigate to="/train" replace /> },
                   ...tabs.map((tab) => ({
                     path: tab.path,
-                    element: <PlaceholderPage />,
+                    element: tabPages[tab.path],
                     handle: titled(tab.label),
                   })),
                   { path: '*', element: <NotFoundPage />, handle: titled('Page not found') },

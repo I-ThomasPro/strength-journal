@@ -18,7 +18,9 @@ const FIELDS = ['username', 'password'] as const
 
 export function LoginPage() {
   const queryClient = useQueryClient()
-  const login = useSessionCreate()
+  // Try even when the browser says it's offline, so a NetworkError explains it at once rather
+  // than the request waiting for the network (TanStack's default)
+  const login = useSessionCreate({ mutation: { networkMode: 'always' } })
   const {
     register,
     handleSubmit,
