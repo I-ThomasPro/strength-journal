@@ -1,12 +1,13 @@
 import type { ReactElement } from 'react'
 import { Navigate, type RouteObject } from 'react-router'
 
-import { RedirectIfLoggedIn, RequireLogin } from '@/auth/guards'
+import { RedirectIfLoggedIn, RequireAdmin, RequireLogin } from '@/auth/guards'
 import { SessionGate } from '@/auth/session-gate'
 import { AppLayout } from '@/components/app-layout'
 import { PublicLayout } from '@/components/public-layout'
 import type { RouteHandle } from '@/lib/page-title'
 import { tabs } from '@/navigation'
+import { AdminPage } from '@/pages/admin-page'
 import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { PlaceholderPage } from '@/pages/placeholder-page'
@@ -19,6 +20,11 @@ const tabPages: Record<(typeof tabs)[number]['path'], ReactElement> = {
   '/routines': <PlaceholderPage />,
   '/history': <PlaceholderPage />,
   '/profile': <ProfilePage />,
+  '/admin': (
+    <RequireAdmin>
+      <AdminPage />
+    </RequireAdmin>
+  ),
 }
 
 /** A route's title, for its layout's header and the browser tab (see usePageTitle) */

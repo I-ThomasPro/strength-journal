@@ -11,6 +11,15 @@ export const testUser: UserRead = {
   is_admin: false,
 }
 
+/** An admin, who also sees the Admin tab */
+export const adminUser: UserRead = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  username: 'coach',
+  display_name: 'Coach',
+  weight_unit: 'kg',
+  is_admin: true,
+}
+
 export function sessionFor(user: UserRead = testUser, csrfToken = 'csrf-token'): SessionRead {
   return { user, csrf_token: csrfToken }
 }

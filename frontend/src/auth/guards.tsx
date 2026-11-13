@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Navigate, Outlet, useLocation, useSearchParams } from 'react-router'
 
 import { safeNext } from '@/auth/next-path'
@@ -26,4 +27,13 @@ export function RedirectIfLoggedIn() {
     return <Navigate to={safeNext(searchParams.get('next')) ?? '/train'} replace />
   }
   return <Outlet />
+}
+
+/** Admin-only pages: anyone else gets the not-found page, as if the page didn't exist. It goes
+ * to an unknown address rather than showing the not-found page here, so the header's title
+ * (from the matched route) says "Page not found" too */
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const { user } = useSession()
+  if (!user?.is_admin) return <Navigate to="/not-found" replace />
+  return children
 }
