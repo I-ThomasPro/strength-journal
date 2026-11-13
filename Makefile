@@ -1,5 +1,7 @@
 UV := uv --directory backend
-PNPM := pnpm --dir frontend
+# Run pnpm inside frontend/, not with --dir: Corepack picks the pnpm version from the
+# package.json where it starts, and only frontend/ has one (its packageManager field)
+PNPM := cd frontend && pnpm
 
 .PHONY: help db-up db-down install dev migrate create-admin lint format test openapi
 .PHONY: fe-install fe-dev fe-build fe-lint fe-format fe-test

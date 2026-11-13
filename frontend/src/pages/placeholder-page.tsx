@@ -1,9 +1,4 @@
-/** Stands in for a tab until its screens are built */
-export function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <section className="space-y-2">
-      <h1 className="text-2xl font-semibold">{title}</h1>
-      <p className="text-muted-foreground">Coming soon</p>
-    </section>
-  )
+/** Stands in for a page until its screens are built; the layout shows its title */
+export function PlaceholderPage() {
+  return <p className="text-muted-foreground">Coming soon</p>
 }

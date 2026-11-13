@@ -162,7 +162,9 @@ The web app is a React + TypeScript single-page app in `frontend/`, built with V
 
 ### Prerequisites
 - Node 22.22 or later (`frontend/.nvmrc`)
-- pnpm 10: `corepack enable` installs the version pinned in `frontend/package.json`
+- pnpm 10: `corepack enable` installs the version pinned in `frontend/package.json` (run pnpm commands inside `frontend/`, as the Makefile does, so Corepack finds that pin)
+  - With asdf, run `asdf reshim nodejs` after `corepack enable`, so the `pnpm` command appears
+  - If Corepack fails with "Cannot find matching keyid", it's too old for npm's current signing keys: run `npm install -g corepack@latest`, or use a recent Node 22
 
 ### Quick start
 With the API running (`make dev`, above), in another terminal:
@@ -197,7 +199,10 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
 - **Imports:** `@/` is `frontend/src/`, e.g. `import { Button } from '@/components/ui/button'`
 - **UI components:** shadcn/ui components are copied into `src/components/ui/`, and the project owns and edits them. Add one from `frontend/` with `pnpm dlx shadcn@latest add <component>`. The theme's colors and radius are CSS variables in `src/index.css`
 - **Classes:** combine conditional Tailwind classes with `cn()` from `@/lib/utils`. Prettier sorts class names
-- **Routes:** `src/routes.tsx`; the bottom bar's tabs are in `src/navigation.ts`
+- **Routes** (`src/routes.tsx`):
+  - Signed-out pages go under `PublicLayout` (a centered card), and signed-in ones under `AppLayout` (header and tab bar). The tab bar's tabs and icons are in `src/navigation.ts`
+  - Each route gives its title with `handle: titled('…')`. The layout's header shows it, and the browser tab gets "Train · Strength Journal" (`usePageTitle` in `src/lib/page-title.ts`)
+  - A page that fails to render shows `RouteErrorPage`, with a "Reload" button, inside the layout
 - **Tests:** next to the code as `*.test.tsx`. Query by role and accessible name, as a user would find things. `src/test/setup.ts` adds the jest-dom matchers (`toBeInTheDocument()` and others)
 - **Linting:** ESLint uses type information (e.g. it flags a promise that's never awaited or handled), React's hooks rules and jsx-a11y's accessibility rules
 
@@ -217,8 +222,8 @@ frontend/
     ├── navigation.ts     # the tab bar's tabs
     ├── index.css         # Tailwind and the theme
     ├── api/              # apiFetch and errors, the query client; generated/ is Orval's output
-    ├── components/       # app components; ui/ holds shadcn/ui's
+    ├── components/       # the layouts and other app components; ui/ holds shadcn/ui's
     ├── pages/            # one component per page
-    ├── lib/              # helpers, e.g. cn() and the weight formatters
+    ├── lib/              # helpers, e.g. cn(), page titles and the weight formatters
     └── test/             # test setup, the MSW server and render helpers
 ```
