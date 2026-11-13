@@ -8,6 +8,7 @@ import { PublicLayout } from '@/components/public-layout'
 import type { RouteHandle } from '@/lib/page-title'
 import { tabs } from '@/navigation'
 import { AdminPage } from '@/pages/admin-page'
+import { ExercisePage } from '@/pages/exercise-page'
 import { ExercisesPage } from '@/pages/exercises-page'
 import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
@@ -71,6 +72,7 @@ export const routes: RouteObject[] = [
                   })),
                   // Opened from the Routines tab, which stays highlighted (see navigation.ts)
                   { path: '/exercises', element: <ExercisesPage />, handle: titled('Exercises') },
+                  { path: '/exercises/:id', element: <ExercisePage />, handle: titled('Exercise') },
                   { path: '*', element: <NotFoundPage />, handle: titled('Page not found') },
                 ],
               },

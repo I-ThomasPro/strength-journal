@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 import { test as base, expect, type Page } from '@playwright/test'
 
-import { API_ENV, BACKEND_DIR } from './env'
+import { API_ENV, BACKEND_DIR, WEB_URL } from './env'
 
 export const PASSWORD = 'a long enough password'
 
@@ -52,6 +52,19 @@ export async function logIn(page: Page, account: Account): Promise<void> {
   await page.getByLabel('Password').fill(account.password)
   await page.getByRole('button', { name: 'Log in' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Train' })).toBeVisible()
+}
+
+/** Adds one of the logged-in user's own exercises through the API, for tests that start from
+ * one. (The API checks a write's Origin, which a request made outside the page doesn't send) */
+export async function addExercise(page: Page, name: string): Promise<void> {
+  const session = (await (await page.request.get('/api/session')).json()) as {
+    csrf_token: string
+  }
+  const response = await page.request.post('/api/exercises', {
+    data: { name },
+    headers: { 'X-CSRF-Token': session.csrf_token, Origin: WEB_URL },
+  })
+  expect(response.status()).toBe(201)
 }
 
 export const test = base.extend<{ admin: Account }>({

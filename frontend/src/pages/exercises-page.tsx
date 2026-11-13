@@ -1,6 +1,6 @@
-import { Plus } from 'lucide-react'
+import { ChevronRight, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useLocation, useSearchParams } from 'react-router'
 
 import { Scope } from '@/api/generated/model'
 import { FormMessage } from '@/components/form-field'
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useExercisePages } from '@/exercises/exercise-pages'
+import type { FromList } from '@/exercises/list-address'
 import { NewExerciseForm } from '@/exercises/new-exercise-form'
 import { useDebouncedValue } from '@/lib/debounce'
 import { requestErrorMessage } from '@/lib/forms'
@@ -151,6 +152,9 @@ function emptyMessage(scope: Scope, q: string): string {
 
 function ExerciseList({ scope, q }: { scope: Scope; q: string }) {
   const online = useOnline()
+  // An exercise's page links back to this list as it is now, with its tab and search
+  const { pathname, search } = useLocation()
+  const fromList: FromList = { list: `${pathname}${search}` }
   const {
     data,
     error,
@@ -195,14 +199,19 @@ function ExerciseList({ scope, q }: { scope: Scope; q: string }) {
     <div className="space-y-4">
       <ul className={cn('divide-y', isPlaceholderData && 'opacity-60')}>
         {exercises.map((exercise) => (
-          <li key={exercise.id} className="flex items-center justify-between gap-3 py-3">
-            <span className="min-w-0 truncate font-medium">{exercise.name}</span>
-            {/* The other tabs hold one kind only */}
-            {scope === Scope.all && (
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {exercise.is_library ? 'Library' : 'Yours'}
+          <li key={exercise.id}>
+            <Link
+              to={`/exercises/${exercise.id}`}
+              state={fromList}
+              className="flex items-center justify-between gap-3 py-3 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <span className="min-w-0 truncate font-medium">{exercise.name}</span>
+              <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                {/* The other tabs hold one kind only */}
+                {scope === Scope.all && (exercise.is_library ? 'Library' : 'Yours')}
+                <ChevronRight aria-hidden="true" className="size-4" />
               </span>
-            )}
+            </Link>
           </li>
         ))}
       </ul>
