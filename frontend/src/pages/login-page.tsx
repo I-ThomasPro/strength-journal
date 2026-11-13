@@ -1,11 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { useNavigate, useSearchParams } from 'react-router'
 
 import { ApiError, NetworkError } from '@/api/client'
 import type { SessionRead } from '@/api/generated/model'
 import { useSessionCreate } from '@/api/generated/session'
-import { safeNext } from '@/auth/next-path'
 import { sessionQueryKey } from '@/auth/session'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,8 +18,6 @@ const FIELDS = ['username', 'password'] as const
 
 export function LoginPage() {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const login = useSessionCreate()
   const {
     register,
@@ -55,9 +51,9 @@ export function LoginPage() {
       showError(error)
       return
     }
-    // The session gate sees the new session in the cache and sets its CSRF token
+    // With the session stored, the session gate sets its CSRF token, and RedirectIfLoggedIn
+    // moves on to `?next=` or Train
     queryClient.setQueryData(sessionQueryKey, session)
-    await navigate(safeNext(searchParams.get('next')) ?? '/train', { replace: true })
   })
 
   return (

@@ -3,10 +3,10 @@ import { expect, it } from 'vitest'
 
 import { App } from '@/app'
 import { server } from '@/test/server'
-import { loggedOut } from '@/test/session'
+import { loggedInAs } from '@/test/session'
 
-it('opens on the Train tab', async () => {
-  server.use(loggedOut())
+it('opens on the Train tab when logged in', async () => {
+  server.use(loggedInAs())
   render(<App />)
 
   expect(await screen.findByRole('heading', { name: 'Train' })).toBeInTheDocument()
