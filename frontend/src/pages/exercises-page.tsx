@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { Plus } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
 import { Scope } from '@/api/generated/model'
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useExercisePages } from '@/exercises/exercise-pages'
+import { NewExerciseForm } from '@/exercises/new-exercise-form'
 import { useDebouncedValue } from '@/lib/debounce'
 import { requestErrorMessage } from '@/lib/forms'
 import { useOnline } from '@/lib/online'
@@ -43,8 +45,9 @@ function withParam(
   return next
 }
 
-/** The library's exercises and the user's own, by tab and search. Both are kept in the address
- * (`?scope=mine&q=squat`), so a reload or coming back shows the same list */
+/** The library's exercises and the user's own, by tab and search, and a form for adding one.
+ * The tab and search are kept in the address (`?scope=mine&q=squat`), so a reload or coming
+ * back shows the same list */
 export function ExercisesPage() {
   const [params, setParams] = useSearchParams()
   const scope = toScope(params.get('scope'))
@@ -58,27 +61,62 @@ export function ExercisesPage() {
     setParams((current) => withParam(current, 'q', search), { replace: true })
   }, [search, q, setParams])
 
+  // The form for a new exercise, and the name of the one it last added
+  const [adding, setAdding] = useState(false)
+  const [added, setAdded] = useState<string | null>(null)
+  const newButton = useRef<HTMLButtonElement>(null)
+  function closeForm() {
+    setAdding(false)
+    // Back to where the form was opened from
+    newButton.current?.focus()
+  }
+
   return (
     <div className="space-y-4">
       <OfflineNotice>You’re offline. Exercises need a connection.</OfflineNotice>
 
-      <div>
-        <Label htmlFor="exercise-search" className="sr-only">
-          Search exercises
-        </Label>
-        <Input
-          id="exercise-search"
-          type="search"
-          placeholder="Search exercises"
-          autoComplete="off"
-          enterKeyHint="search"
-          maxLength={MAX_SEARCH_LENGTH}
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value)
+      <div className="flex gap-2">
+        <div className="min-w-0 flex-1">
+          <Label htmlFor="exercise-search" className="sr-only">
+            Search exercises
+          </Label>
+          <Input
+            id="exercise-search"
+            type="search"
+            placeholder="Search exercises"
+            autoComplete="off"
+            enterKeyHint="search"
+            maxLength={MAX_SEARCH_LENGTH}
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value)
+            }}
+          />
+        </div>
+        <Button
+          ref={newButton}
+          variant="outline"
+          aria-expanded={adding}
+          onClick={() => {
+            setAdded(null)
+            setAdding((open) => !open)
           }}
-        />
+        >
+          <Plus aria-hidden="true" />
+          New exercise
+        </Button>
       </div>
+
+      {adding && (
+        <NewExerciseForm
+          onCreated={(exercise) => {
+            setAdded(exercise.name)
+            closeForm()
+          }}
+          onCancel={closeForm}
+        />
+      )}
+      {added !== null && <FormMessage kind="success">Added “{added}”</FormMessage>}
 
       <Tabs
         value={scope}
