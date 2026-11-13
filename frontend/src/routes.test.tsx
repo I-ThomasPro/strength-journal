@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest'
 
 import { tabs } from '@/navigation'
 import { renderApp } from '@/test/render'
-import { loggedInAs } from '@/test/session'
+import { adminUser, loggedInAs } from '@/test/session'
 
+/** As an admin, who sees every tab */
 function renderAt(path: string) {
-  return renderApp(path, loggedInAs()).router
+  return renderApp(path, loggedInAs(adminUser)).router
 }
 
 describe('routes', () => {
@@ -26,6 +27,17 @@ describe('routes', () => {
     const nav = screen.getByRole('navigation', { name: 'Main' })
     expect(within(nav).getAllByRole('link')).toHaveLength(tabs.length)
     expect(within(nav).getByRole('link', { current: 'page' })).toHaveTextContent(label)
+  })
+
+  it('shows everyone else every tab but Admin', async () => {
+    renderApp('/train', loggedInAs())
+
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Train', 'Routines', 'History', 'Profile'])
   })
 
   it('switches tabs from the tab bar', async () => {

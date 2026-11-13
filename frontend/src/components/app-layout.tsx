@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router'
 
+import { useSession } from '@/auth/session'
 import { usePageTitle } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
 import { tabs } from '@/navigation'
@@ -8,6 +9,8 @@ import { tabs } from '@/navigation'
  * tab bar fixed along the bottom. Safe-area insets keep both clear of notches and home bars */
 export function AppLayout() {
   const title = usePageTitle()
+  const { user } = useSession()
+  const visibleTabs = tabs.filter((tab) => !tab.adminOnly || user?.is_admin === true)
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -27,7 +30,7 @@ export function AppLayout() {
         className="fixed inset-x-0 bottom-0 z-10 border-t bg-background pb-[env(safe-area-inset-bottom)]"
       >
         <ul className="mx-auto flex h-16 w-full max-w-2xl">
-          {tabs.map(({ path, label, icon: Icon }) => (
+          {visibleTabs.map(({ path, label, icon: Icon }) => (
             <li key={path} className="flex-1">
               <NavLink
                 to={path}

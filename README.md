@@ -213,6 +213,11 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
     - `RequireLogin` wraps the signed-in pages and sends a logged-out user to `/login?next=<where they were>`
     - `RedirectIfLoggedIn` wraps the signed-out pages and sends a logged-in user on to `?next=` or Train. That's also how the login page moves on once it stores the session. `safeNext()` keeps the redirect on this site
   - **Expired sessions:** a 401 `not_authenticated` on any query or mutation sets the session to `null` (`endSessionIfExpired` in `src/api/query-client.ts`), so the guard sends the user to log in and back. A 401 `invalid_credentials` (a wrong password in a form) doesn't
+- **Admin-only pages:** a tab with `adminOnly: true` (`src/navigation.ts`) shows only to admins, and its page sits inside `RequireAdmin`, which sends anyone else to the not-found page
+- **Forms:** react-hook-form, laid out with `FormField` and `FormMessage` (`src/components/form-field.tsx`). The helpers are in `src/lib/forms.ts`:
+  - Give each input `{...fieldAria(id, {hint, error})}`
+  - On a failed request, call `showRequestError(error, setError, FIELDS, {code: field})`. It puts a 422's errors on their fields, and mapped codes such as `duplicate_username` on theirs. Everything else goes at form level, with a network message when offline
+  - Mutations the user waits on use `networkMode: 'always'`, so offline they fail at once
 - **Tests that render pages:** use `renderApp(path, ...handlers)` from `src/test/render.tsx`. It renders the real routes with the app's query client (without retries), answering `GET /api/session` as logged out unless a handler such as `loggedInAs(user)` (`src/test/session.ts`) comes first. Signed-in pages need `loggedInAs()`
 - **Tests:** next to the code as `*.test.tsx`. Query by role and accessible name, as a user would find things. `src/test/setup.ts` adds the jest-dom matchers (`toBeInTheDocument()` and others)
 - **Linting:** ESLint uses type information (e.g. it flags a promise that's never awaited or handled), React's hooks rules and jsx-a11y's accessibility rules
