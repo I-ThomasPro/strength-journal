@@ -27,3 +27,30 @@ test('opening the exercises from the Routines tab, with a tab and search that a 
   await expect(page.getByRole('tab', { name: 'Mine' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText('No exercises match “squat”')).toBeVisible()
 })
+
+test('adding an exercise, finding it by searching, and not adding it twice', async ({
+  page,
+  admin,
+}) => {
+  await logIn(page, admin)
+  await page.goto('/exercises')
+
+  await page.getByRole('button', { name: 'New exercise' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Zercher Squat')
+  await page.getByRole('button', { name: 'Add exercise' }).click()
+  await expect(page.getByRole('status')).toHaveText('Added “Zercher Squat”')
+
+  // It's one of the user's own, and a search finds it
+  await page.getByRole('tab', { name: 'Mine' }).click()
+  await page.getByRole('searchbox', { name: 'Search exercises' }).fill('zercher')
+  const rows = page.getByRole('tabpanel').getByRole('listitem')
+  await expect(rows).toHaveText(['Zercher Squat'])
+  await page.reload()
+  await expect(rows).toHaveText(['Zercher Squat'])
+
+  // The same name again, in another case, goes on the name field
+  await page.getByRole('button', { name: 'New exercise' }).click()
+  await page.getByLabel('Name', { exact: true }).fill('zercher squat')
+  await page.getByRole('button', { name: 'Add exercise' }).click()
+  await expect(page.getByText('You already have an exercise with this name')).toBeVisible()
+})

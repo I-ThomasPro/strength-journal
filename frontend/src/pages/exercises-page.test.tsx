@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { ExerciseRead } from '@/api/generated/model'
+import { answerExercises as answerExercisesFrom, exercise } from '@/test/exercises'
 import { renderApp } from '@/test/render'
 import { server } from '@/test/server'
 import { loggedInAs } from '@/test/session'
@@ -12,17 +12,6 @@ import { loggedInAs } from '@/test/session'
 afterEach(() => {
   onlineManager.setOnline(true)
 })
-
-function exercise(name: string, { library = false } = {}): ExerciseRead {
-  return {
-    id: `id-${name}`,
-    name,
-    type: 'strength',
-    is_library: library,
-    created_at: '2026-11-01T10:00:00Z',
-    updated_at: '2026-11-01T10:00:00Z',
-  }
-}
 
 const EXERCISES = [
   exercise('Back Squat', { library: true }),
@@ -32,31 +21,7 @@ const EXERCISES = [
   exercise('Zottman Curl'),
 ]
 
-/** Answers GET /api/exercises like the API does, from `all` (already in name order): by scope,
- * part of the name, and page. Records each request's query */
-function answerExercises(all: ExerciseRead[] = EXERCISES) {
-  const requests: Record<string, string>[] = []
-  server.use(
-    http.get('/api/exercises', ({ request }) => {
-      const query = new URL(request.url).searchParams
-      requests.push(Object.fromEntries(query))
-      const scope = query.get('scope') ?? 'all'
-      const q = (query.get('q') ?? '').toLowerCase()
-      const limit = Number(query.get('limit') ?? 50)
-      const offset = Number(query.get('offset') ?? 0)
-      const matching = all.filter(
-        (item) =>
-          (scope === 'all' || item.is_library === (scope === 'library')) &&
-          item.name.toLowerCase().includes(q),
-      )
-      return HttpResponse.json({
-        items: matching.slice(offset, offset + limit),
-        total: matching.length,
-      })
-    }),
-  )
-  return requests
-}
+const answerExercises = (all = EXERCISES) => answerExercisesFrom(all)
 
 function openExercises(path = '/exercises') {
   return renderApp(path, loggedInAs())
