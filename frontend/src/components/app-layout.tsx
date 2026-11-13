@@ -1,16 +1,19 @@
-import { NavLink, Outlet } from 'react-router'
+import { Link, Outlet, useLocation } from 'react-router'
 
 import { useSession } from '@/auth/session'
 import { usePageTitle } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
-import { tabs } from '@/navigation'
+import { isTabActive, tabs, type Tab } from '@/navigation'
 
 /** Signed-in pages: a header with the page's title, the page in a centered column, and the
  * tab bar fixed along the bottom. Safe-area insets keep both clear of notches and home bars */
 export function AppLayout() {
   const title = usePageTitle()
   const { user } = useSession()
-  const visibleTabs = tabs.filter((tab) => !tab.adminOnly || user?.is_admin === true)
+  const { pathname } = useLocation()
+  const visibleTabs: readonly Tab[] = tabs.filter(
+    (tab) => !tab.adminOnly || user?.is_admin === true,
+  )
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -30,26 +33,25 @@ export function AppLayout() {
         className="fixed inset-x-0 bottom-0 z-10 border-t bg-background pb-[env(safe-area-inset-bottom)]"
       >
         <ul className="mx-auto flex h-16 w-full max-w-2xl">
-          {visibleTabs.map(({ path, label, icon: Icon }) => (
-            <li key={path} className="flex-1">
-              <NavLink
-                to={path}
-                className={({ isActive }) =>
-                  cn(
+          {visibleTabs.map((tab) => {
+            // Also on the tab's sections, which a NavLink wouldn't count
+            const active = isTabActive(tab, pathname)
+            return (
+              <li key={tab.path} className="flex-1">
+                <Link
+                  to={tab.path}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
                     'flex h-full flex-col items-center justify-center gap-1 text-xs font-medium transition-colors',
-                    isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon aria-hidden="true" className="size-5" strokeWidth={isActive ? 2.5 : 2} />
-                    {label}
-                  </>
-                )}
-              </NavLink>
-            </li>
-          ))}
+                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <tab.icon aria-hidden="true" className="size-5" strokeWidth={active ? 2.5 : 2} />
+                  {tab.label}
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       </nav>
     </div>
