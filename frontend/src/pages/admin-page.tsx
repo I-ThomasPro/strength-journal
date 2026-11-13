@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 
 import { WeightUnit, type UserRead } from '@/api/generated/model'
 import { useUsersCreate } from '@/api/generated/users'
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from '@/auth/password'
 import { FormField, FormMessage } from '@/components/form-field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,11 +29,7 @@ const EMPTY: NewAccountValues = {
   is_admin: false,
 }
 
-/** The API's minimum (MIN_PASSWORD_LENGTH in backend/app/auth/security.py) */
-const MIN_PASSWORD_LENGTH = 10
-
 const USERNAME_HINT = '3 to 32 letters, digits, dots, underscores or hyphens'
-const PASSWORD_HINT = `At least ${String(MIN_PASSWORD_LENGTH)} characters`
 
 /** Admins create accounts here (POST /api/users); RequireAdmin keeps everyone else out */
 export function AdminPage() {

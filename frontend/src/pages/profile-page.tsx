@@ -7,13 +7,14 @@ import type { SessionRead, UserRead, WeightUnit } from '@/api/generated/model'
 import { useProfileUpdate } from '@/api/generated/profile'
 import { logoutErrorMessage, useLogout } from '@/auth/logout'
 import { sessionQueryKey, useSession } from '@/auth/session'
+import { ChangePasswordForm } from '@/components/change-password-form'
 import { FormField, FormMessage } from '@/components/form-field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { WeightUnitSelect } from '@/components/weight-unit-select'
 import { fieldAria, showRequestError } from '@/lib/forms'
 
-/** Who's logged in, their settings, and logging out. Changing the password comes with #82 */
+/** Who's logged in, their settings and password, and logging out */
 export function ProfilePage() {
   const { user } = useSession()
   const logout = useLogout()
@@ -29,6 +30,7 @@ export function ProfilePage() {
           </section>
           {/* A new form for each user, so it starts from their settings */}
           <ProfileForm key={user.id} user={user} />
+          <ChangePasswordForm username={user.username} />
         </>
       )}
 
