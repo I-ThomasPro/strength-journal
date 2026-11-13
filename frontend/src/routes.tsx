@@ -8,16 +8,18 @@ import { PublicLayout } from '@/components/public-layout'
 import type { RouteHandle } from '@/lib/page-title'
 import { tabs } from '@/navigation'
 import { AdminPage } from '@/pages/admin-page'
+import { ExercisesPage } from '@/pages/exercises-page'
 import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { PlaceholderPage } from '@/pages/placeholder-page'
 import { ProfilePage } from '@/pages/profile-page'
+import { RoutinesPage } from '@/pages/routines-page'
 import { RootErrorPage, RouteErrorPage } from '@/pages/route-error-page'
 
 /** Each tab's page; placeholders until their screens are built */
 const tabPages: Record<(typeof tabs)[number]['path'], ReactElement> = {
   '/train': <PlaceholderPage />,
-  '/routines': <PlaceholderPage />,
+  '/routines': <RoutinesPage />,
   '/history': <PlaceholderPage />,
   '/profile': <ProfilePage />,
   '/admin': (
@@ -67,6 +69,8 @@ export const routes: RouteObject[] = [
                     element: tabPages[tab.path],
                     handle: titled(tab.label),
                   })),
+                  // Opened from the Routines tab, which stays highlighted (see navigation.ts)
+                  { path: '/exercises', element: <ExercisesPage />, handle: titled('Exercises') },
                   { path: '*', element: <NotFoundPage />, handle: titled('Page not found') },
                 ],
               },
