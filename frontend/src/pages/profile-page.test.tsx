@@ -142,3 +142,95 @@ describe('logging out', () => {
     expect(await screen.findByRole('button', { name: 'Logging out…' })).toBeDisabled()
   })
 })
+
+/** Answers PATCH /api/profile like the API, recording each body and CSRF header */
+function answerProfileUpdates(respond?: () => Response | Promise<Response>) {
+  const sent: { token: string | null; body: unknown }[] = []
+  server.use(
+    http.patch('/api/profile', async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>
+      sent.push({ token: request.headers.get('X-CSRF-Token'), body })
+      return respond ? respond() : HttpResponse.json({ ...testUser, ...body })
+    }),
+  )
+  return sent
+}
+
+describe('profile settings', () => {
+  it('start from the user’s own, with Save off until something changes', async () => {
+    await openProfile()
+
+    expect(screen.getByLabelText('Display name')).toHaveValue('Lifter')
+    expect(screen.getByLabelText('Weight unit')).toHaveValue('kg')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('save, and show the new name everywhere', async () => {
+    const sent = answerProfileUpdates()
+    const { queryClient } = await openProfile()
+
+    await userEvent.clear(screen.getByLabelText('Display name'))
+    await userEvent.type(screen.getByLabelText('Display name'), 'Strong Lifter')
+    await userEvent.selectOptions(screen.getByLabelText('Weight unit'), 'lb')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
+    expect(sent).toEqual([
+      { token: 'old-token', body: { display_name: 'Strong Lifter', weight_unit: 'lb' } },
+    ])
+    expect(screen.getByRole('region', { name: 'Account' })).toHaveTextContent('Strong Lifter')
+    expect(queryClient.getQueryData(sessionQueryKey)).toMatchObject({
+      user: { display_name: 'Strong Lifter', weight_unit: 'lb' },
+    })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+
+    // Editing again hides "Saved"
+    await userEvent.type(screen.getByLabelText('Display name'), '!')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('need a display name, checked before sending', async () => {
+    const sent = answerProfileUpdates()
+    await openProfile()
+
+    await userEvent.clear(screen.getByLabelText('Display name'))
+    await userEvent.type(screen.getByLabelText('Display name'), '   ')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Enter a display name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Display name')).toHaveAttribute('aria-invalid', 'true')
+    expect(sent).toEqual([])
+  })
+
+  it('show validation errors on their fields', async () => {
+    answerProfileUpdates(() =>
+      HttpResponse.json(
+        {
+          detail: 'Request validation failed',
+          code: 'invalid',
+          errors: [{ type: 'string_too_long', loc: ['body', 'display_name'], msg: 'Too long' }],
+        },
+        { status: 422 },
+      ),
+    )
+    await openProfile()
+
+    await userEvent.type(screen.getByLabelText('Display name'), ' the Strong')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Too long')).toBeInTheDocument()
+    expect(screen.getByLabelText('Display name')).toHaveAccessibleDescription('Too long')
+  })
+
+  it('say so at once when the browser is offline', async () => {
+    answerProfileUpdates(() => HttpResponse.error())
+    await openProfile()
+    onlineManager.setOnline(false)
+
+    await userEvent.selectOptions(screen.getByLabelText('Weight unit'), 'lb')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t reach the server')
+    expect(screen.getByRole('region', { name: 'Account' })).toHaveTextContent('Lifter')
+  })
+})

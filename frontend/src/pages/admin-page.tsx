@@ -7,8 +7,8 @@ import { FormField, FormMessage } from '@/components/form-field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { WeightUnitSelect } from '@/components/weight-unit-select'
 import { fieldAria, showRequestError } from '@/lib/forms'
-import { cn } from '@/lib/utils'
 
 interface NewAccountValues {
   username: string
@@ -119,21 +119,11 @@ export function AdminPage() {
         </FormField>
 
         <FormField id="weight_unit" label="Weight unit" error={errors.weight_unit?.message}>
-          <select
+          <WeightUnitSelect
             id="weight_unit"
-            className={cn(
-              'h-9 w-full rounded-md border border-input bg-transparent px-3 text-base shadow-xs outline-none md:text-sm',
-              'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-            )}
             {...fieldAria('weight_unit', { error: errors.weight_unit?.message })}
             {...register('weight_unit')}
-          >
-            {Object.values(WeightUnit).map((unit) => (
-              <option key={unit} value={unit}>
-                {unit}
-              </option>
-            ))}
-          </select>
+          />
         </FormField>
 
         <div className="flex items-center gap-2">
