@@ -1,4 +1,4 @@
-import { expect, logIn, test } from './fixtures'
+import { addExercise, expect, logIn, test } from './fixtures'
 
 test('opening the exercises from the Routines tab, with a tab and search that a reload keeps', async ({
   page,
@@ -53,4 +53,37 @@ test('adding an exercise, finding it by searching, and not adding it twice', asy
   await page.getByLabel('Name', { exact: true }).fill('zercher squat')
   await page.getByRole('button', { name: 'Add exercise' }).click()
   await expect(page.getByText('You already have an exercise with this name')).toBeVisible()
+})
+
+test('opening an exercise from the list, and going back to the same search', async ({
+  page,
+  admin,
+}) => {
+  await logIn(page, admin)
+  await addExercise(page, 'Zercher Squat')
+  await page.goto('/exercises?scope=mine&q=zercher')
+
+  await page.getByRole('link', { name: 'Zercher Squat' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Zercher Squat' })).toBeVisible()
+  await expect(page.getByText('Your exercise')).toBeVisible()
+  await expect(page).toHaveURL(/\/exercises\/[0-9a-f-]{36}$/)
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Routines' }),
+  ).toHaveAttribute('aria-current', 'page')
+
+  // A reload keeps the way back
+  await page.reload()
+  await page.getByRole('link', { name: 'Exercises' }).click()
+  await expect(page).toHaveURL(/\/exercises\?scope=mine&q=zercher$/)
+  await expect(page.getByRole('tabpanel').getByRole('listitem')).toHaveText(['Zercher Squat'])
+
+  // An address that isn't one of this user's exercises
+  await page.goto('/exercises/00000000-0000-4000-8000-000000000000')
+  await expect(
+    page.getByText('This exercise doesn’t exist. It may have been deleted.'),
+  ).toBeVisible()
+  await page.goto('/exercises/not-an-id')
+  await expect(
+    page.getByText('This exercise doesn’t exist. It may have been deleted.'),
+  ).toBeVisible()
 })
