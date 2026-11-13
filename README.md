@@ -207,8 +207,11 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
   - `SessionGate`, the root route, loads `GET /api/session` before any page shows, with a splash meanwhile, and keeps the CSRF token in step with it
   - Components read the user with `useSession()` (`{status, user}`). Being logged out is `status: 'logged-out'`, not an error
   - The session lives in the query cache under `sessionQueryKey`: logging in stores the response there with `setQueryData`, and logging out will clear it
-  - `safeNext()` keeps a `?next=` redirect on this site
-- **Tests that render pages:** use `renderApp(path, ...handlers)` from `src/test/render.tsx`. It renders the real routes, answering `GET /api/session` as logged out unless a handler such as `loggedInAs(user)` (`src/test/session.ts`) comes first
+  - **Guards** (`src/auth/guards.tsx`):
+    - `RequireLogin` wraps the signed-in pages and sends a logged-out user to `/login?next=<where they were>`
+    - `RedirectIfLoggedIn` wraps the signed-out pages and sends a logged-in user on to `?next=` or Train. That's also how the login page moves on once it stores the session. `safeNext()` keeps the redirect on this site
+  - **Expired sessions:** a 401 `not_authenticated` on any query or mutation sets the session to `null` (`endSessionIfExpired` in `src/api/query-client.ts`), so the guard sends the user to log in and back. A 401 `invalid_credentials` (a wrong password in a form) doesn't
+- **Tests that render pages:** use `renderApp(path, ...handlers)` from `src/test/render.tsx`. It renders the real routes with the app's query client (without retries), answering `GET /api/session` as logged out unless a handler such as `loggedInAs(user)` (`src/test/session.ts`) comes first. Signed-in pages need `loggedInAs()`
 - **Tests:** next to the code as `*.test.tsx`. Query by role and accessible name, as a user would find things. `src/test/setup.ts` adds the jest-dom matchers (`toBeInTheDocument()` and others)
 - **Linting:** ESLint uses type information (e.g. it flags a promise that's never awaited or handled), React's hooks rules and jsx-a11y's accessibility rules
 

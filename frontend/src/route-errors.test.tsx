@@ -6,6 +6,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 
 import { reloadPage } from '@/lib/reload'
 import { renderApp } from '@/test/render'
+import { loggedInAs } from '@/test/session'
 
 vi.mock('@/lib/reload', () => ({ reloadPage: vi.fn() }))
 vi.mock('@/pages/placeholder-page', () => ({
@@ -26,7 +27,7 @@ beforeEach(() => {
 })
 
 function renderAt(path: string) {
-  renderApp(path)
+  renderApp(path, loggedInAs())
 }
 
 it('shows the error inside the layout when a page fails, with a way to reload', async () => {
@@ -43,7 +44,7 @@ it('shows the error inside the layout when a page fails, with a way to reload', 
 })
 
 it('shows the error on its own when a layout fails', async () => {
-  renderAt('/login')
+  renderApp('/login') // logged out
 
   const alert = await screen.findByRole('alert')
   expect(within(alert).getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument()

@@ -58,10 +58,10 @@ describe('the session gate', () => {
         { status: 401 },
       )
     })
-    renderApp('/train', slowly)
+    renderApp('/login', slowly)
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading…')
-    expect(await screen.findByRole('heading', { level: 1, name: 'Train' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Log in' })).toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
@@ -85,6 +85,7 @@ describe('the session gate', () => {
     renderApp(
       '/train',
       http.get('/api/session', () => HttpResponse.error(), { once: true }),
+      loggedInAs(),
     )
 
     const alert = await screen.findByRole('alert')

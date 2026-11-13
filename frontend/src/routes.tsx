@@ -1,5 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router'
 
+import { RedirectIfLoggedIn, RequireLogin } from '@/auth/guards'
 import { SessionGate } from '@/auth/session-gate'
 import { AppLayout } from '@/components/app-layout'
 import { PublicLayout } from '@/components/public-layout'
@@ -23,24 +24,36 @@ export const routes: RouteObject[] = [
     errorElement: <RootErrorPage />,
     children: [
       {
-        element: <PublicLayout />,
-        children: [{ path: '/login', element: <LoginPage />, handle: titled('Log in') }],
-      },
-      {
-        path: '/',
-        element: <AppLayout />,
+        // Signed-out pages: a logged-in user moves on to `?next=` or Train
+        element: <RedirectIfLoggedIn />,
         children: [
           {
-            // A page that fails shows the error inside the layout, so the tab bar still works
-            errorElement: <RouteErrorPage />,
+            element: <PublicLayout />,
+            children: [{ path: '/login', element: <LoginPage />, handle: titled('Log in') }],
+          },
+        ],
+      },
+      {
+        // Signed-in pages: a logged-out user goes to log in first
+        element: <RequireLogin />,
+        children: [
+          {
+            path: '/',
+            element: <AppLayout />,
             children: [
-              { index: true, element: <Navigate to="/train" replace /> },
-              ...tabs.map((tab) => ({
-                path: tab.path,
-                element: <PlaceholderPage />,
-                handle: titled(tab.label),
-              })),
-              { path: '*', element: <NotFoundPage />, handle: titled('Page not found') },
+              {
+                // A page that fails shows the error inside the layout, so the tab bar still works
+                errorElement: <RouteErrorPage />,
+                children: [
+                  { index: true, element: <Navigate to="/train" replace /> },
+                  ...tabs.map((tab) => ({
+                    path: tab.path,
+                    element: <PlaceholderPage />,
+                    handle: titled(tab.label),
+                  })),
+                  { path: '*', element: <NotFoundPage />, handle: titled('Page not found') },
+                ],
+              },
             ],
           },
         ],

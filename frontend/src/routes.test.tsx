@@ -4,9 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 import { tabs } from '@/navigation'
 import { renderApp } from '@/test/render'
+import { loggedInAs } from '@/test/session'
 
 function renderAt(path: string) {
-  return renderApp(path).router
+  return renderApp(path, loggedInAs()).router
 }
 
 describe('routes', () => {
@@ -38,7 +39,7 @@ describe('routes', () => {
   })
 
   it('shows the login page in the signed-out layout, without the tab bar', async () => {
-    renderAt('/login')
+    renderApp('/login') // logged out
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Log in' })).toBeInTheDocument()
     expect(screen.getByText('Strength Journal')).toBeInTheDocument()
