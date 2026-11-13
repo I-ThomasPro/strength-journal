@@ -4,6 +4,10 @@ coverage
 *.local
 *.tsbuildinfo
 
+# Playwright's reports and traces
+playwright-report
+test-results
+
 # The API client, generated from openapi.json by `pnpm generate` (orval.config.ts)
 src/api/generated
 

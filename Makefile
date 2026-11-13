@@ -4,7 +4,7 @@ UV := uv --directory backend
 PNPM := cd frontend && pnpm
 
 .PHONY: help db-up db-down install dev migrate create-admin lint format test openapi
-.PHONY: fe-install fe-dev fe-build fe-lint fe-format fe-test
+.PHONY: fe-install fe-dev fe-build fe-lint fe-format fe-test fe-e2e
 
 help: ## Show available targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -61,3 +61,6 @@ fe-format: ## Fix frontend lint issues and format code
 
 fe-test: ## Run the frontend tests
 	$(PNPM) test
+
+fe-e2e: ## Run the end-to-end tests (needs Postgres; starts its own API and app)
+	$(PNPM) e2e

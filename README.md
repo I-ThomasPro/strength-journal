@@ -181,7 +181,22 @@ make fe-test    # Vitest + Testing Library
 make fe-lint    # ESLint, Prettier check and typecheck
 make fe-format  # fix lint issues and format
 make fe-build   # typecheck and build into frontend/dist
+make fe-e2e     # Playwright end-to-end tests against the real API
 ```
+
+### End-to-end tests
+Playwright (`frontend/e2e/`, `frontend/playwright.config.ts`) drives the real app and API in Chromium at phone size.
+- **Setup:** install its browser once (from `frontend/`): `pnpm exec playwright install chromium`. Postgres must be running (`make db-up`)
+- **Running:** `make fe-e2e`. It starts its own API on port 8001 and app on port 5174, so it can run while `make dev` and `make fe-dev` use 8000 and 5173
+  - The tests use their own database, `strength_journal_e2e`. They commit data, while the pytest database relies on rolling back
+  - The global setup creates that database if it's missing and migrates it
+  - Set `E2E_DATABASE_URL` if your Postgres isn't the one `make db-up` starts
+- **Writing tests:** import `test` and `expect` from `e2e/fixtures.ts`
+  - The `admin` fixture is a fresh admin for each test, made with `python -m app.cli create-admin --password-stdin`
+  - `logIn(page, account)` logs in through the login page
+  - `uniqueUsername()` keeps tests that run at the same time apart
+- **Debugging:** traces are off; re-run a failing test with `pnpm e2e --trace on` (from `frontend/`), then `pnpm exec playwright show-trace`
+- **Without Playwright's download:** set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to a Chromium binary you already have, instead of installing one
 
 ### API client
 The app talks to the API through TanStack Query hooks that [Orval](https://orval.dev/) generates from `frontend/openapi.json` (`orval.config.ts`):
