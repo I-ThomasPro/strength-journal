@@ -19,7 +19,7 @@ test('an admin creates an account, which logs in without the Admin tab', async (
   await page.getByLabel('Weight unit').selectOption('lb')
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page.getByRole('status')).toHaveText(
-    `Created @${lifter.username}. They can log in later.`,
+    `Created @${lifter.username}. They can log in now.`,
   )
 
   await nav.getByRole('link', { name: 'Profile' }).click()
