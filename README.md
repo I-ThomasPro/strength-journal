@@ -162,7 +162,9 @@ The web app is a React + TypeScript single-page app in `frontend/`, built with V
 
 ### Prerequisites
 - Node 22.22 or later (`frontend/.nvmrc`)
-- pnpm 10: `corepack enable` installs the version pinned in `frontend/package.json`
+- pnpm 10: `corepack enable` installs the version pinned in `frontend/package.json` (run pnpm commands inside `frontend/`, as the Makefile does, so Corepack finds that pin)
+  - With asdf, run `asdf reshim nodejs` after `corepack enable`, so the `pnpm` command appears
+  - If Corepack fails with "Cannot find matching keyid", it's too old for npm's current signing keys: run `npm install -g corepack@latest`, or use a recent Node 22
 
 ### Quick start
 With the API running (`make dev`, above), in another terminal:
