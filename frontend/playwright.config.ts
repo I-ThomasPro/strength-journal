@@ -15,6 +15,8 @@ export default defineConfig({
     baseURL: WEB_URL,
     // Off for speed; re-run a failing test with `pnpm e2e --trace on` to record one
     trace: 'off',
+    // A failing test's last screen, for the report (CI uploads it as an artifact)
+    screenshot: 'only-on-failure',
   },
   projects: [
     {

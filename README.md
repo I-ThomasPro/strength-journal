@@ -196,6 +196,7 @@ Playwright (`frontend/e2e/`, `frontend/playwright.config.ts`) drives the real ap
   - `logIn(page, account)` logs in through the login page
   - `uniqueUsername()` keeps tests that run at the same time apart
 - **Debugging:** traces are off; re-run a failing test with `pnpm e2e --trace on` (from `frontend/`), then `pnpm exec playwright show-trace`
+- **CI:** the End-to-end workflow (`.github/workflows/e2e.yml`) runs `make fe-e2e` on every change to `frontend/` or `backend/`, against a Postgres service. The browser is cached by Playwright version. When a test fails, the run uploads the HTML report, with a screenshot of each failing test, as the `playwright-report` artifact
 - **Without Playwright's download:** set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to a Chromium binary you already have, instead of installing one
 
 ### API client
