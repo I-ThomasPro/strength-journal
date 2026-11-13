@@ -219,6 +219,7 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
   - Signed-out pages go under `PublicLayout` (a centered card), and signed-in ones under `AppLayout` (header and tab bar). The tab bar's tabs and icons are in `src/navigation.ts`
   - Each route gives its title with `handle: titled('…')`. The layout's header shows it, and the browser tab gets "Train · Strength Journal" (`usePageTitle` in `src/lib/page-title.ts`)
   - A page that fails to render shows `RouteErrorPage`, with a "Reload" button, inside the layout
+  - A page outside the tab bar belongs to a tab through that tab's `sections` (`src/navigation.ts`), and the tab stays highlighted there. `/exercises` is a section of Routines
 - **Session** (`src/auth/`):
   - `SessionGate`, the root route, loads `GET /api/session` before any page shows, with a splash meanwhile, and keeps the CSRF token in step with it
   - Components read the user with `useSession()` (`{status, user}`). Being logged out is `status: 'logged-out'`, not an error
@@ -235,6 +236,11 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
   - On a failed request, call `showRequestError(error, setError, FIELDS, {code: field})`. It puts a 422's errors on their fields, and mapped codes such as `duplicate_username` on theirs. Everything else goes at form level, with a network message when offline
   - Mutations the user waits on use `networkMode: 'always'`, so offline they fail at once
   - A new password's minimum length and its hint are `MIN_PASSWORD_LENGTH` and `PASSWORD_HINT` in `src/auth/password.ts`, which matches the API's minimum
+- **Lists:**
+  - Filters go in the address with `useSearchParams` (the Exercises list's `?scope=mine&q=squat`), replacing the history entry, so a reload or coming back shows the same list
+  - A search box updates the address once the typing pauses: `useDebouncedValue()` (`src/lib/debounce.ts`)
+  - Paging is "Load more" over an infinite query, e.g. `useExercisePages(scope, q)` (`src/exercises/exercise-pages.ts`). Its key starts like the generated hook's, so invalidating `/api/exercises` covers it
+- **Offline:** a screen that needs a connection shows `<OfflineNotice>` (`src/components/offline-notice.tsx`), which appears only while the browser is offline. `useOnline()` (`src/lib/online.ts`) gives the same state, e.g. to disable a button
 - **Tests that render pages:** use `renderApp(path, ...handlers)` from `src/test/render.tsx`. It renders the real routes with the app's query client (without retries), answering `GET /api/session` as logged out unless a handler such as `loggedInAs(user)` (`src/test/session.ts`) comes first. Signed-in pages need `loggedInAs()`
 - **Tests:** next to the code as `*.test.tsx`. Query by role and accessible name, as a user would find things. `src/test/setup.ts` adds the jest-dom matchers (`toBeInTheDocument()` and others)
 - **Linting:** ESLint uses type information (e.g. it flags a promise that's never awaited or handled), React's hooks rules and jsx-a11y's accessibility rules
@@ -256,6 +262,7 @@ frontend/
     ├── index.css         # Tailwind and the theme
     ├── api/              # apiFetch and errors, the query client; generated/ is Orval's output
     ├── components/       # the layouts and other app components; ui/ holds shadcn/ui's
+    ├── exercises/        # loading exercises a page at a time
     ├── pages/            # one component per page
     ├── lib/              # helpers, e.g. cn(), page titles and the weight formatters
     └── test/             # test setup, the MSW server and render helpers
