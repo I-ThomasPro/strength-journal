@@ -87,3 +87,32 @@ test('opening an exercise from the list, and going back to the same search', asy
     page.getByText('This exercise doesn’t exist. It may have been deleted.'),
   ).toBeVisible()
 })
+
+test('renaming an exercise, on its page and in the list', async ({ page, admin }) => {
+  await logIn(page, admin)
+  await addExercise(page, 'Zercher Squat')
+  await addExercise(page, 'Sled Push')
+  await page.goto('/exercises?scope=mine')
+  await page.getByRole('link', { name: 'Zercher Squat' }).click()
+
+  // A name the user already has, in another case, goes on the name field
+  await page.getByRole('button', { name: 'Rename' }).click()
+  const name = page.getByLabel('Name', { exact: true })
+  await expect(name).toHaveValue('Zercher Squat')
+  await name.fill('sled push')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('You already have an exercise with this name')).toBeVisible()
+
+  await name.fill('Zercher Carry')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Zercher Carry' })).toBeVisible()
+  await expect(page.getByRole('status')).toHaveText('Renamed')
+
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 2, name: 'Zercher Carry' })).toBeVisible()
+  await page.getByRole('link', { name: 'Exercises' }).click()
+  await expect(page.getByRole('tabpanel').getByRole('listitem')).toHaveText([
+    'Sled Push',
+    'Zercher Carry',
+  ])
+})

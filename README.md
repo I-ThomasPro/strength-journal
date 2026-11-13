@@ -241,7 +241,7 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
   - Filters go in the address with `useSearchParams` (the Exercises list's `?scope=mine&q=squat`), replacing the history entry, so a reload or coming back shows the same list
   - A search box updates the address once the typing pauses: `useDebouncedValue()` (`src/lib/debounce.ts`)
   - A row that opens a detail page passes the list's address in the link's `state`, and the detail's back link returns there: `FromList` and `listToReturnTo()` (`src/exercises/list-address.ts`)
-  - Paging is "Load more" over an infinite query, e.g. `useExercisePages(scope, q)` (`src/exercises/exercise-pages.ts`). Its key starts like the generated hook's, so invalidating `getExercisesIndexQueryKey()` after a write reloads every search and page, as `NewExerciseForm` does
+  - Paging is "Load more" over an infinite query, e.g. `useExercisePages(scope, q)` (`src/exercises/exercise-pages.ts`). Its key starts like the generated hook's, so invalidating `getExercisesIndexQueryKey()` after a write reloads every search and page, as `NewExerciseForm` and `RenameExerciseForm` do
 - **Offline:** a screen that needs a connection shows `<OfflineNotice>` (`src/components/offline-notice.tsx`), which appears only while the browser is offline. `useOnline()` (`src/lib/online.ts`) gives the same state, e.g. to disable a button
 - **Tests that render pages:** use `renderApp(path, ...handlers)` from `src/test/render.tsx`. It renders the real routes with the app's query client (without retries), answering `GET /api/session` as logged out unless a handler such as `loggedInAs(user)` (`src/test/session.ts`) comes first. Signed-in pages need `loggedInAs()`. For screens that list or show exercises, `answerExercises(all)` (`src/test/exercises.ts`) answers `GET /api/exercises` by scope, name and page, and `GET /api/exercises/:id`
 - **Tests:** next to the code as `*.test.tsx`. Query by role and accessible name, as a user would find things. `src/test/setup.ts` adds the jest-dom matchers (`toBeInTheDocument()` and others)
@@ -264,7 +264,7 @@ frontend/
     ├── index.css         # Tailwind and the theme
     ├── api/              # apiFetch and errors, the query client; generated/ is Orval's output
     ├── components/       # the layouts and other app components; ui/ holds shadcn/ui's
-    ├── exercises/        # loading exercises a page at a time, the new-exercise form, the way back to the list
+    ├── exercises/        # loading exercises a page at a time, the forms that add and rename one, the way back to the list
     ├── pages/            # one component per page
     ├── lib/              # helpers, e.g. cn(), page titles and the weight formatters
     └── test/             # test setup, the MSW server and render helpers

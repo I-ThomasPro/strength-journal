@@ -57,6 +57,8 @@ describe('the new exercise form', () => {
     await openForm(all)
     expect(nameField()).toHaveFocus()
     expect(newButton()).toHaveAttribute('aria-expanded', 'true')
+    // Nothing to add until there's a name
+    expect(screen.getByRole('button', { name: 'Add exercise' })).toBeDisabled()
 
     await add('Zercher Squat')
 
