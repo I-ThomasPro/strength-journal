@@ -1,6 +1,9 @@
 import { expect, logIn, test } from './fixtures'
 
-test('opening the exercises from the Routines tab', async ({ page, admin }) => {
+test('opening the exercises from the Routines tab, with a tab and search that a reload keeps', async ({
+  page,
+  admin,
+}) => {
   await logIn(page, admin)
   const nav = page.getByRole('navigation', { name: 'Main' })
   await nav.getByRole('link', { name: 'Routines' }).click()
@@ -10,6 +13,17 @@ test('opening the exercises from the Routines tab', async ({ page, admin }) => {
   await expect(page).toHaveURL(/\/exercises$/)
   await expect(nav.getByRole('link', { name: 'Routines' })).toHaveAttribute('aria-current', 'page')
 
-  // The library is empty until it's seeded, and a new account has no exercises of its own
-  await expect(page.getByText('No exercises yet')).toBeVisible()
+  // A new account has no exercises of its own yet
+  await page.getByRole('tab', { name: 'Mine' }).click()
+  await expect(page.getByText('You haven’t added any exercises yet')).toBeVisible()
+  await expect(page).toHaveURL(/\/exercises\?scope=mine$/)
+
+  const search = page.getByRole('searchbox', { name: 'Search exercises' })
+  await search.fill('squat')
+  await expect(page.getByText('No exercises match “squat”')).toBeVisible()
+
+  await page.reload()
+  await expect(search).toHaveValue('squat')
+  await expect(page.getByRole('tab', { name: 'Mine' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('No exercises match “squat”')).toBeVisible()
 })
