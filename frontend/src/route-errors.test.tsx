@@ -1,13 +1,11 @@
 // What happens when a page or a layout fails to render. The modules below are replaced with
 // ones that throw, so this file has its own tests
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
 import { beforeEach, expect, it, vi } from 'vitest'
 
 import { reloadPage } from '@/lib/reload'
-import { routes } from '@/routes'
+import { renderApp } from '@/test/render'
 
 vi.mock('@/lib/reload', () => ({ reloadPage: vi.fn() }))
 vi.mock('@/pages/placeholder-page', () => ({
@@ -28,7 +26,7 @@ beforeEach(() => {
 })
 
 function renderAt(path: string) {
-  render(<RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />)
+  renderApp(path)
 }
 
 it('shows the error inside the layout when a page fails, with a way to reload', async () => {
