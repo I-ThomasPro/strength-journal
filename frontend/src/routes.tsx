@@ -1,9 +1,11 @@
 import { Navigate, type RouteObject } from 'react-router'
 
+import { SessionGate } from '@/auth/session-gate'
 import { AppLayout } from '@/components/app-layout'
 import { PublicLayout } from '@/components/public-layout'
 import type { RouteHandle } from '@/lib/page-title'
 import { tabs } from '@/navigation'
+import { LoginPage } from '@/pages/login-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { PlaceholderPage } from '@/pages/placeholder-page'
 import { RootErrorPage, RouteErrorPage } from '@/pages/route-error-page'
@@ -15,13 +17,14 @@ function titled(title: string): RouteHandle {
 
 export const routes: RouteObject[] = [
   {
-    // If a layout itself fails
+    // Loads who's logged in before any page shows
+    element: <SessionGate />,
+    // If the gate or a layout fails
     errorElement: <RootErrorPage />,
     children: [
       {
         element: <PublicLayout />,
-        // A placeholder until logging in is built (#67)
-        children: [{ path: '/login', element: <PlaceholderPage />, handle: titled('Log in') }],
+        children: [{ path: '/login', element: <LoginPage />, handle: titled('Log in') }],
       },
       {
         path: '/',

@@ -203,6 +203,12 @@ The app talks to the API through TanStack Query hooks that [Orval](https://orval
   - Signed-out pages go under `PublicLayout` (a centered card), and signed-in ones under `AppLayout` (header and tab bar). The tab bar's tabs and icons are in `src/navigation.ts`
   - Each route gives its title with `handle: titled('…')`. The layout's header shows it, and the browser tab gets "Train · Strength Journal" (`usePageTitle` in `src/lib/page-title.ts`)
   - A page that fails to render shows `RouteErrorPage`, with a "Reload" button, inside the layout
+- **Session** (`src/auth/`):
+  - `SessionGate`, the root route, loads `GET /api/session` before any page shows, with a splash meanwhile, and keeps the CSRF token in step with it
+  - Components read the user with `useSession()` (`{status, user}`). Being logged out is `status: 'logged-out'`, not an error
+  - The session lives in the query cache under `sessionQueryKey`: logging in stores the response there with `setQueryData`, and logging out will clear it
+  - `safeNext()` keeps a `?next=` redirect on this site
+- **Tests that render pages:** use `renderApp(path, ...handlers)` from `src/test/render.tsx`. It renders the real routes, answering `GET /api/session` as logged out unless a handler such as `loggedInAs(user)` (`src/test/session.ts`) comes first
 - **Tests:** next to the code as `*.test.tsx`. Query by role and accessible name, as a user would find things. `src/test/setup.ts` adds the jest-dom matchers (`toBeInTheDocument()` and others)
 - **Linting:** ESLint uses type information (e.g. it flags a promise that's never awaited or handled), React's hooks rules and jsx-a11y's accessibility rules
 
